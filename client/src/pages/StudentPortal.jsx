@@ -817,10 +817,7 @@ export default function StudentPortal() {
                       : 'glass opacity-60 border-2 border-gray-300/30'
                   }`}
                 >
-                  <div 
-                    className="flex justify-between items-start mb-3 sm:mb-4 gap-2"
-                    onClick={(e) => isActive && e.stopPropagation()}
-                  >
+                  <div className="flex justify-between items-start mb-3 sm:mb-4 gap-2">
                     <h4 className={`text-base sm:text-lg font-semibold flex-1 min-w-0 ${isSelected ? 'text-white' : 'text-white'}`}>
                       <span className="truncate block">{printer.name}</span>
                       {isSelected && (

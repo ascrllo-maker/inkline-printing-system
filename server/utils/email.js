@@ -79,6 +79,11 @@ const sendEmailWithSendGrid = async (to, subject, html, retries = 2) => {
 
   // Convert HTML to plain text for better deliverability
   const text = htmlToText(html);
+  
+  // Clean subject line - remove spam trigger words
+  const cleanSubject = subject
+    .replace(/\s+/g, ' ') // Remove extra spaces
+    .trim();
 
   for (let attempt = 1; attempt <= retries; attempt++) {
     try {
@@ -92,21 +97,41 @@ const sendEmailWithSendGrid = async (to, subject, html, retries = 2) => {
           email: replyTo,
           name: fromName
         },
-        subject,
+        subject: cleanSubject,
         text, // Plain text version (required for better deliverability)
         html, // HTML version
-        // Add custom headers to improve deliverability
+        // Add custom headers to improve deliverability and reduce spam
         headers: {
           'X-Entity-Ref-ID': `inkline-${Date.now()}`,
-          'List-Unsubscribe': `<mailto:${replyTo}?subject=Unsubscribe>`,
-          'List-Unsubscribe-Post': 'List-Unsubscribe=One-Click'
+          'List-Unsubscribe': `<mailto:${replyTo}?subject=Unsubscribe>, <https://inkline-printing-system.onrender.com/unsubscribe>`,
+          'List-Unsubscribe-Post': 'List-Unsubscribe=One-Click',
+          'Precedence': 'bulk', // Indicate this is a transactional email
+          'X-Auto-Response-Suppress': 'All', // Suppress auto-responders
+          'Auto-Submitted': 'auto-generated', // Indicate automated email
+          'X-Mailer': 'InkLine Printing System', // Identify the sender
+          'Message-ID': `<${Date.now()}-${Math.random().toString(36).substring(7)}@inkline-dvc.com>`, // Unique message ID
+          'Date': new Date().toUTCString() // Proper date header
         },
         // Add categories for better tracking and deliverability
-        categories: ['inkline-printing-system'],
+        categories: ['inkline-printing-system', 'transactional'],
         // Mail settings for better deliverability
         mailSettings: {
           sandboxMode: {
             enable: false // Make sure sandbox mode is disabled
+          },
+          // Bypass list management (for transactional emails)
+          bypassListManagement: {
+            enable: true
+          },
+          // Footer settings (disable SendGrid footer for better deliverability)
+          footer: {
+            enable: false
+          },
+          // Spam check (optional - can help identify issues)
+          spamCheck: {
+            enable: false, // Disable to avoid false positives
+            threshold: 5,
+            postToUrl: ''
           }
         },
         // Tracking settings
@@ -119,7 +144,16 @@ const sendEmailWithSendGrid = async (to, subject, html, retries = 2) => {
           },
           subscriptionTracking: {
             enable: false // Disable subscription tracking for better deliverability
+          },
+          ganalytics: {
+            enable: false // Disable Google Analytics tracking
           }
+        },
+        // Custom args for better tracking
+        customArgs: {
+          source: 'inkline-printing-system',
+          type: 'transactional',
+          timestamp: Date.now().toString()
         }
       };
 

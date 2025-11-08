@@ -814,7 +814,6 @@ export default function StudentPortal() {
                       ? 'glass-card border-2 border-transparent active:scale-[1.02] sm:hover:scale-105 sm:hover:border-blue-300/50'
                       : 'glass opacity-60 cursor-not-allowed border-2 border-gray-300/30'
                   }`}
-                  style={{ pointerEvents: isActive ? 'auto' : 'none' }}
                 >
                   <div className="flex justify-between items-start mb-3 sm:mb-4 gap-2">
                     <h4 className={`text-base sm:text-lg font-semibold flex-1 min-w-0 ${isSelected ? 'text-white' : 'text-white'}`}>

@@ -6,6 +6,7 @@ import { createServer } from 'http';
 import { Server } from 'socket.io';
 import path from 'path';
 import { fileURLToPath } from 'url';
+import fs from 'fs';
 import authRoutes from './routes/auth.js';
 import printerRoutes from './routes/printer.js';
 import orderRoutes from './routes/order.js';
@@ -76,15 +77,81 @@ app.use(express.json({ limit: '50mb' }));
 app.use(express.urlencoded({ extended: true, limit: '50mb' }));
 app.use('/uploads', express.static('uploads'));
 
-// Health check endpoint for Cloud Run
+// Health check endpoint for Render and Cloud Run
 app.get('/health', (req, res) => {
-  res.status(200).json({ status: 'ok', timestamp: new Date().toISOString() });
+  const dbStatus = mongoose.connection.readyState === 1 ? 'connected' : 'disconnected';
+  res.status(200).json({ 
+    status: 'ok', 
+    timestamp: new Date().toISOString(),
+    database: dbStatus,
+    uptime: process.uptime()
+  });
 });
 
-// MongoDB Connection
-mongoose.connect(process.env.MONGODB_URI)
-  .then(() => console.log('✅ Connected to MongoDB'))
-  .catch(err => console.error('❌ MongoDB connection error:', err));
+// Root endpoint - responds quickly for Render health checks
+// This must be defined BEFORE the static file serving
+app.get('/', (req, res) => {
+  if (process.env.NODE_ENV === 'production') {
+    // In production, serve the React app
+    const clientBuildPath = path.join(__dirname, '../client/dist');
+    const indexPath = path.join(clientBuildPath, 'index.html');
+    
+    // Check if index.html exists
+    if (fs.existsSync(indexPath)) {
+      res.sendFile(indexPath);
+    } else {
+      // Fallback if build doesn't exist yet
+      res.json({ 
+        message: 'InkLine API Server',
+        status: 'running',
+        environment: 'production',
+        note: 'Client build not found. Please check build process.',
+        timestamp: new Date().toISOString()
+      });
+    }
+  } else {
+    res.json({ 
+      message: 'InkLine API Server',
+      status: 'running',
+      environment: 'development',
+      timestamp: new Date().toISOString()
+    });
+  }
+});
+
+// MongoDB Connection - Non-blocking, server starts even if DB is not ready
+console.log('🔄 Connecting to MongoDB...');
+if (process.env.MONGODB_URI) {
+  mongoose.connect(process.env.MONGODB_URI, {
+    serverSelectionTimeoutMS: 5000, // Timeout after 5 seconds
+    socketTimeoutMS: 45000, // Close sockets after 45 seconds of inactivity
+  })
+    .then(() => {
+      console.log('✅ Connected to MongoDB');
+      console.log('   Database:', mongoose.connection.name);
+      console.log('   Host:', mongoose.connection.host);
+    })
+    .catch(err => {
+      console.error('❌ MongoDB connection error:', err.message);
+      console.warn('⚠️ Server will continue without database connection');
+      console.warn('⚠️ Some features may not work until database is connected');
+    });
+
+  // MongoDB connection event handlers
+  mongoose.connection.on('connected', () => {
+    console.log('✅ MongoDB connected');
+  });
+
+  mongoose.connection.on('error', (err) => {
+    console.error('❌ MongoDB connection error:', err.message);
+  });
+
+  mongoose.connection.on('disconnected', () => {
+    console.warn('⚠️ MongoDB disconnected');
+  });
+} else {
+  console.warn('⚠️ MONGODB_URI not set. Database features will not work.');
+}
 
 // Socket.IO
 io.on('connection', (socket) => {
@@ -128,16 +195,29 @@ app.use('/api/test', testRoutes);
 // Serve static files from React app in production
 if (process.env.NODE_ENV === 'production') {
   const clientBuildPath = path.join(__dirname, '../client/dist');
-  app.use(express.static(clientBuildPath));
   
-  // Serve React app for all non-API routes
-  app.get('*', (req, res) => {
-    // Don't serve React app for API routes
-    if (req.path.startsWith('/api')) {
-      return res.status(404).json({ message: 'API route not found' });
-    }
-    res.sendFile(path.join(clientBuildPath, 'index.html'));
-  });
+  // Check if dist folder exists
+  const fs = await import('fs');
+  if (fs.existsSync(clientBuildPath)) {
+    console.log('✅ Serving static files from:', clientBuildPath);
+    app.use(express.static(clientBuildPath));
+    
+    // Serve React app for all non-API routes (after root route)
+    app.get('*', (req, res, next) => {
+      // Don't serve React app for API routes
+      if (req.path.startsWith('/api')) {
+        return next();
+      }
+      // Don't serve React app for health check
+      if (req.path === '/health') {
+        return next();
+      }
+      res.sendFile(path.join(clientBuildPath, 'index.html'));
+    });
+  } else {
+    console.warn('⚠️ Client build folder not found:', clientBuildPath);
+    console.warn('⚠️ Make sure to run: npm run build');
+  }
 }
 
 // Error handling middleware
@@ -146,14 +226,46 @@ app.use((err, req, res, next) => {
   res.status(500).json({ message: 'Something went wrong!', error: err.message });
 });
 
+// Error handlers
+process.on('unhandledRejection', (err) => {
+  console.error('❌ Unhandled Rejection:', err);
+  // Don't exit in production, let the server continue
+  if (process.env.NODE_ENV !== 'production') {
+    process.exit(1);
+  }
+});
+
+process.on('uncaughtException', (err) => {
+  console.error('❌ Uncaught Exception:', err);
+  process.exit(1);
+});
+
+// Start server
 const PORT = process.env.PORT || 5000;
 const HOST = process.env.HOST || '0.0.0.0';
 
+console.log('🔄 Starting server...');
+console.log(`📦 Environment: ${process.env.NODE_ENV || 'development'}`);
+console.log(`🔌 Port: ${PORT}`);
+console.log(`🌐 Host: ${HOST}`);
+console.log(`💾 Database: ${process.env.MONGODB_URI ? 'Configured' : 'Not configured'}`);
+console.log(`📧 Email: ${process.env.SENDGRID_API_KEY ? 'SendGrid' : process.env.EMAIL_USER ? 'Gmail' : 'Not configured'}`);
+
 httpServer.listen(PORT, HOST, () => {
-  console.log(`🚀 Server running on ${HOST}:${PORT}`);
-  console.log(`📦 Environment: ${process.env.NODE_ENV || 'development'}`);
+  console.log('');
+  console.log('════════════════════════════════════════');
+  console.log('🚀 Server is running!');
+  console.log(`   URL: http://${HOST}:${PORT}`);
+  console.log(`   Environment: ${process.env.NODE_ENV || 'development'}`);
+  console.log('════════════════════════════════════════');
+  console.log('');
+  
   if (process.env.CLIENT_URL) {
     console.log(`🌐 Client URL: ${process.env.CLIENT_URL}`);
   }
+  
+  // Health check info
+  console.log(`💚 Health check: http://${HOST}:${PORT}/health`);
+  console.log('');
 });
 

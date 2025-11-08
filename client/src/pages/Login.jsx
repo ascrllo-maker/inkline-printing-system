@@ -19,7 +19,7 @@ export default function Login() {
   const [idImage, setIdImage] = useState(null);
   const [signupLoading, setSignupLoading] = useState(false);
 
-  const { login } = useAuth();
+  const { login, setUserFromSignup } = useAuth();
   const navigate = useNavigate();
 
   const handleLogin = async (e) => {
@@ -61,8 +61,12 @@ export default function Login() {
       };
 
       const response = await authAPI.signup(formData);
+      console.log('Signup response:', response);
+      const responseData = response.data;
+      console.log('Signup response data:', responseData);
       
       if (isBSIT) {
+        // BSIT students need approval - just show message and switch to login
         toast.success('Account created! Please wait for IT Admin approval.');
         setIsLogin(true);
         setFullName('');
@@ -71,16 +75,47 @@ export default function Login() {
         setIsBSIT(false);
         setIdImage(null);
       } else {
-        toast.success('Account created successfully! You can now log in.');
-        setIsLogin(true);
-        setFullName('');
-        setSignupEmail('');
-        setSignupPassword('');
-        setIsBSIT(false);
-        setIdImage(null);
+        // Non-BSIT students are approved immediately - log them in automatically
+        if (responseData.token && responseData.user) {
+          // Save token to localStorage
+          localStorage.setItem('token', responseData.token);
+          
+          // Update user in context directly
+          setUserFromSignup(responseData.user);
+          
+          toast.success('Account created successfully!');
+          
+          // Clear form
+          setFullName('');
+          setSignupEmail('');
+          setSignupPassword('');
+          setIsBSIT(false);
+          setIdImage(null);
+          
+          // Navigate to student portal immediately
+          navigate('/student');
+        } else {
+          // Fallback if no token (shouldn't happen for non-BSIT)
+          toast.success('Account created successfully! You can now log in.');
+          setIsLogin(true);
+          setFullName('');
+          setSignupEmail('');
+          setSignupPassword('');
+          setIsBSIT(false);
+          setIdImage(null);
+        }
       }
     } catch (error) {
-      toast.error(error.response?.data?.message || 'Signup failed');
+      console.error('Signup error:', error);
+      console.error('Error details:', error.response?.data || error.message);
+      
+      // If account was created but response handling failed, still show success
+      if (error.response?.status === 201 || error.response?.status === 200) {
+        toast.success('Account created successfully! Please log in.');
+        setIsLogin(true);
+      } else {
+        toast.error(error.response?.data?.message || error.message || 'Signup failed');
+      }
     } finally {
       setSignupLoading(false);
     }

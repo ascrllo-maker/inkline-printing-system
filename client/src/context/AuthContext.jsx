@@ -75,7 +75,21 @@ export const AuthProvider = ({ children }) => {
       localStorage.setItem('user', JSON.stringify(user));
     } catch (error) {
       console.error('Failed to refresh user data:', error);
+      // If API call fails, try to use user from localStorage
+      const storedUser = localStorage.getItem('user');
+      if (storedUser) {
+        try {
+          setUser(JSON.parse(storedUser));
+        } catch (e) {
+          console.error('Failed to parse stored user:', e);
+        }
+      }
     }
+  };
+
+  const setUserFromSignup = (userData) => {
+    setUser(userData);
+    localStorage.setItem('user', JSON.stringify(userData));
   };
 
   const value = {
@@ -84,6 +98,7 @@ export const AuthProvider = ({ children }) => {
     login,
     logout,
     refreshUser,
+    setUserFromSignup,
     isAuthenticated: !!user,
     isStudent: user?.role === 'student',
     isITAdmin: user?.role === 'it_admin',

@@ -35,7 +35,10 @@ export const authAPI = {
     }
     // Use api instance to ensure relative URLs and proper baseURL handling
     return api.post('/auth/signup', formData, {
-      headers: { 'Content-Type': 'multipart/form-data' },
+      headers: { 
+        'Content-Type': 'multipart/form-data',
+      },
+      timeout: 30000, // 30 second timeout
     });
   },
   getMe: () => api.get('/auth/me'),

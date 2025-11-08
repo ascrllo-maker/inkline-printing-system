@@ -315,10 +315,37 @@ export default function StudentPortal() {
       toast.error('This printer is not available');
       return;
     }
+    
+    // Get available paper sizes for this printer
+    const availableSizes = printer.availablePaperSizes.filter(ps => ps.enabled);
+    
+    if (availableSizes.length === 0) {
+      toast.error('This printer has no available paper sizes');
+      return;
+    }
+    
+    // Check if current paper size is available for this printer
+    const currentSize = orderForm.paperSize;
+    const isCurrentSizeAvailable = availableSizes.some(ps => {
+      // Case-insensitive comparison
+      return ps.size.toLowerCase() === currentSize.toLowerCase();
+    });
+    
+    // If current paper size is not available, use the first available size
+    const paperSizeToUse = isCurrentSizeAvailable 
+      ? currentSize 
+      : availableSizes[0].size;
+    
+    // Show info message if paper size was changed
+    if (!isCurrentSizeAvailable && currentSize) {
+      toast.info(`Paper size set to ${paperSizeToUse} (${currentSize} not available for this printer)`);
+    }
+    
     setSelectedPrinter(printer);
     setOrderForm({
       ...orderForm,
       printerId: printer._id,
+      paperSize: paperSizeToUse,
     });
   };
 

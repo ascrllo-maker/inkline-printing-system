@@ -102,19 +102,18 @@ router.post('/create', protect, uploadFile.single('file'), async (req, res) => {
       // Continue even if notification creation fails
     }
 
-    // Send email notification to student when order is created
-    try {
-      await sendOrderCreatedEmail(
-        req.user.email,
-        req.user.fullName,
-        orderNumber,
-        shop,
-        order.queuePosition
-      );
-    } catch (emailError) {
-      console.error('Error sending order created email:', emailError);
-      // Continue even if email fails
-    }
+    // Send email notification to student when order is created (non-blocking)
+    // Don't await - send email asynchronously so it doesn't block the response
+    sendOrderCreatedEmail(
+      req.user.email,
+      req.user.fullName,
+      orderNumber,
+      shop,
+      order.queuePosition
+    ).catch(emailError => {
+      console.error('Error sending order created email:', emailError.message || emailError);
+      // Email failure shouldn't affect order creation
+    });
 
     // Create notifications for all admins of this shop
     try {
@@ -188,25 +187,27 @@ router.post('/create', protect, uploadFile.single('file'), async (req, res) => {
       }
     }
 
-    // Emit socket events
-    if (io) {
-      try {
-        io.to(`${shop}_admins`).emit('new_order', populatedOrder);
-        if (updatedPrinter) {
-          io.emit('printer_updated', updatedPrinter);
-        }
-        io.to(`${shop}_admins`).emit('notification', { type: 'new_order' });
-        io.to(req.user._id.toString()).emit('order_created', populatedOrder);
-      } catch (socketError) {
-        console.error('Error emitting socket events:', socketError);
-        // Continue even if socket emission fails
-      }
-    }
-
+    // Send response immediately before emitting socket events
     res.status(201).json({
       message: 'Order created successfully',
       order: populatedOrder
     });
+
+    // Emit socket events after response is sent (non-blocking)
+    if (io) {
+      setImmediate(() => {
+        try {
+          io.to(`${shop}_admins`).emit('new_order', populatedOrder);
+          if (updatedPrinter) {
+            io.emit('printer_updated', updatedPrinter);
+          }
+          io.to(`${shop}_admins`).emit('notification', { type: 'new_order' });
+          io.to(req.user._id.toString()).emit('order_created', populatedOrder);
+        } catch (socketError) {
+          console.error('Error emitting socket events:', socketError);
+        }
+      });
+    }
   } catch (error) {
     console.error('Order creation error:', error);
     res.status(500).json({ message: 'Server error', error: error.message });

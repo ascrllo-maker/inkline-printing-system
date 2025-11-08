@@ -20,6 +20,13 @@ export const connectSocket = (userId) => {
     auth: {
       userId: userId,
     },
+    transports: ['websocket', 'polling'], // Try websocket first, fallback to polling
+    reconnection: true,
+    reconnectionDelay: 1000,
+    reconnectionDelayMax: 5000,
+    reconnectionAttempts: 5,
+    timeout: 20000,
+    forceNew: false
   });
 
   socket.on('connect', () => {

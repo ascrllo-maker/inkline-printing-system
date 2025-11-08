@@ -64,6 +64,7 @@ export const orderAPI = {
     }
     return api.post('/orders/create', formData, {
       headers: { 'Content-Type': 'multipart/form-data' },
+      timeout: 60000, // 60 second timeout for file uploads
     });
   },
   getMyOrders: () => api.get('/orders/my-orders'),

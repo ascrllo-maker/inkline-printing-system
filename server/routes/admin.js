@@ -45,12 +45,10 @@ router.put('/approve-account/:id', protect, adminOnly('IT'), async (req, res) =>
     user.accountStatus = 'approved';
     await user.save();
 
-    // Send approval email
-    try {
-      await sendAccountApprovedEmail(user.email, user.fullName);
-    } catch (emailError) {
-      console.error('Email sending failed:', emailError);
-    }
+    // Send approval email (non-blocking)
+    sendAccountApprovedEmail(user.email, user.fullName).catch(emailError => {
+      console.error('Error sending approval email:', emailError.message || emailError);
+    });
 
     // Create notification
     await Notification.create({
@@ -259,15 +257,15 @@ router.put('/update-order-status/:id', protect, async (req, res) => {
       relatedOrderId: order._id
     });
 
-    // Send email notifications for order status changes
-    try {
-      if (status === 'Printing') {
-        await sendOrderPrintingEmail(order.userId.email, order.userId.fullName, order.orderNumber, order.shop);
-      } else if (status === 'Ready for Pickup' || status === 'Ready for Pickup & Payment') {
-        await sendOrderReadyEmail(order.userId.email, order.userId.fullName, order.orderNumber, order.shop);
-      }
-    } catch (emailError) {
-      console.error('Email sending failed:', emailError);
+    // Send email notifications for order status changes (non-blocking)
+    if (status === 'Printing') {
+      sendOrderPrintingEmail(order.userId.email, order.userId.fullName, order.orderNumber, order.shop).catch(emailError => {
+        console.error('Error sending printing email:', emailError.message || emailError);
+      });
+    } else if (status === 'Ready for Pickup' || status === 'Ready for Pickup & Payment') {
+      sendOrderReadyEmail(order.userId.email, order.userId.fullName, order.orderNumber, order.shop).catch(emailError => {
+        console.error('Error sending ready email:', emailError.message || emailError);
+      });
     }
 
     // Populate order before emitting
@@ -275,14 +273,21 @@ router.put('/update-order-status/:id', protect, async (req, res) => {
       .populate('userId', 'fullName email')
       .populate('printerId');
 
-    // Emit socket events
+    // Send response immediately
+    res.json({ message: 'Order status updated successfully', order: populatedOrderForEmit || order });
+
+    // Emit socket events after response is sent (non-blocking)
     const io = req.app.get('io');
     if (io) {
-      io.to(order.userId._id.toString()).emit('order_updated', populatedOrderForEmit || order);
-      io.to(`${order.shop}_admins`).emit('order_updated', populatedOrderForEmit || order);
+      setImmediate(() => {
+        try {
+          io.to(order.userId._id.toString()).emit('order_updated', populatedOrderForEmit || order);
+          io.to(`${order.shop}_admins`).emit('order_updated', populatedOrderForEmit || order);
+        } catch (socketError) {
+          console.error('Error emitting socket events:', socketError);
+        }
+      });
     }
-
-    res.json({ message: 'Order status updated successfully', order: populatedOrderForEmit || order });
   } catch (error) {
     res.status(500).json({ message: 'Server error', error: error.message });
   }

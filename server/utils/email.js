@@ -15,11 +15,11 @@ const createTransporter = () => {
       pass: process.env.EMAIL_PASS
     },
     // Additional options for better reliability in production
-    pool: true,
-    maxConnections: 5,
-    maxMessages: 100,
-    rateDelta: 1000,
-    rateLimit: 5,
+    pool: false, // Disable pooling to avoid connection issues
+    // Add connection timeout settings
+    connectionTimeout: 10000, // 10 seconds
+    socketTimeout: 10000, // 10 seconds
+    greetingTimeout: 10000, // 10 seconds
     // Fix certificate issues
     tls: {
       rejectUnauthorized: false
@@ -56,7 +56,13 @@ export const sendEmail = async (to, subject, html) => {
       html
     };
 
-    const info = await transporter.sendMail(mailOptions);
+    // Add timeout to email sending (10 seconds)
+    const sendPromise = transporter.sendMail(mailOptions);
+    const timeoutPromise = new Promise((_, reject) => {
+      setTimeout(() => reject(new Error('Email sending timeout')), 10000);
+    });
+
+    const info = await Promise.race([sendPromise, timeoutPromise]);
     console.log('✉️ Email sent successfully to:', to);
     return { success: true, messageId: info.messageId };
   } catch (error) {
@@ -66,8 +72,8 @@ export const sendEmail = async (to, subject, html) => {
     if (error.code === 'EAUTH') {
       console.error('   → Authentication failed. Check your EMAIL_USER and EMAIL_PASS in .env');
       console.error('   → For Gmail, you may need to use an App Password instead of your regular password');
-    } else if (error.code === 'ECONNECTION') {
-      console.error('   → Connection failed. Check your internet connection.');
+    } else if (error.code === 'ECONNECTION' || error.message.includes('timeout')) {
+      console.error('   → Connection failed or timeout. Email will be skipped.');
     }
     
     return { success: false, error: error.message };

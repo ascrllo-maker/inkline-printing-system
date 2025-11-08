@@ -28,10 +28,29 @@ const allowedOrigins = process.env.CLIENT_URL
 
 const io = new Server(httpServer, {
   cors: {
-    origin: allowedOrigins,
+    origin: function(origin, callback) {
+      // Allow requests with no origin (like mobile apps or curl requests)
+      if (!origin) return callback(null, true);
+      
+      // In production, allow requests from same origin (relative URLs)
+      if (process.env.NODE_ENV === 'production') {
+        return callback(null, true);
+      }
+      
+      // In development, check allowed origins
+      if (allowedOrigins.indexOf(origin) !== -1) {
+        callback(null, true);
+      } else {
+        callback(new Error('Not allowed by CORS'));
+      }
+    },
     methods: ['GET', 'POST', 'PUT', 'DELETE'],
-    credentials: true
-  }
+    credentials: true,
+    transports: ['websocket', 'polling'] // Support both transports
+  },
+  // Add ping timeout and ping interval for better connection stability
+  pingTimeout: 60000,
+  pingInterval: 25000
 });
 
 // Middleware

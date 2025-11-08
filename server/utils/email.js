@@ -1,74 +1,123 @@
+import sgMail from '@sendgrid/mail';
 import nodemailer from 'nodemailer';
 
-// Create transporter with Gmail configuration
-const createTransporter = () => {
-  // Check if email credentials are configured
+// Initialize SendGrid if API key is provided
+if (process.env.SENDGRID_API_KEY) {
+  sgMail.setApiKey(process.env.SENDGRID_API_KEY);
+}
+
+// Create Gmail SMTP transporter (fallback)
+const createGmailTransporter = () => {
   if (!process.env.EMAIL_USER || !process.env.EMAIL_PASS) {
-    console.warn('⚠️ Email credentials not configured. Email notifications will be disabled.');
     return null;
   }
 
-  // Try port 587 (TLS) first - often works better with hosting providers
-  // If 587 fails, we can try 465 (SSL) as fallback
-  // Gmail SMTP settings:
-  // - Port 587: TLS (more compatible with firewalls)
-  // - Port 465: SSL (sometimes blocked)
   return nodemailer.createTransport({
     host: 'smtp.gmail.com',
-    port: 587, // Use TLS port (587) instead of SSL (465) - better compatibility
-    secure: false, // false for 587, true for 465
-    requireTLS: true, // Require TLS for port 587
+    port: 587,
+    secure: false,
+    requireTLS: true,
     auth: {
       user: process.env.EMAIL_USER,
       pass: process.env.EMAIL_PASS
     },
-    // Connection timeout settings - increased for better reliability
-    connectionTimeout: 30000, // 30 seconds
-    socketTimeout: 30000, // 30 seconds
-    greetingTimeout: 30000, // 30 seconds
-    // TLS options
+    connectionTimeout: 30000,
+    socketTimeout: 30000,
+    greetingTimeout: 30000,
     tls: {
-      rejectUnauthorized: false, // Allow self-signed certificates
-      minVersion: 'TLSv1.2' // Use TLS 1.2 or higher
+      rejectUnauthorized: false,
+      minVersion: 'TLSv1.2'
     },
-    // Disable pooling - create fresh connection each time
-    pool: false,
-    // Retry options
-    maxRetries: 0, // We handle retries manually
-    // Debug mode (set to true for detailed logs)
-    debug: false,
-    logger: false
+    pool: false
   });
 };
 
-// Create a fresh transporter for each email to avoid connection issues
-// This ensures we don't have stale connections or connection pooling problems
-const getTransporter = () => {
-  return createTransporter();
-};
-
+// Send email using SendGrid (preferred) or Gmail SMTP (fallback)
 export const sendEmail = async (to, subject, html, retries = 2) => {
-  // Check if email is configured
-  if (!process.env.EMAIL_USER || !process.env.EMAIL_PASS) {
-    console.warn('⚠️ Email credentials not configured. Skipping email to:', to);
-    return { success: false, error: 'Email not configured' };
-  }
-
   // Validate email address
   if (!to || !to.includes('@')) {
     console.error('❌ Invalid email address:', to);
     return { success: false, error: 'Invalid email address' };
   }
 
-  // Try sending email with retries
+  // Try SendGrid first (preferred)
+  if (process.env.SENDGRID_API_KEY) {
+    return await sendEmailWithSendGrid(to, subject, html, retries);
+  }
+
+  // Fallback to Gmail SMTP if SendGrid is not configured
+  if (process.env.EMAIL_USER && process.env.EMAIL_PASS) {
+    return await sendEmailWithGmail(to, subject, html, retries);
+  }
+
+  // No email service configured
+  console.warn('⚠️ No email service configured. Please set SENDGRID_API_KEY or EMAIL_USER/EMAIL_PASS in Render environment variables.');
+  return { success: false, error: 'Email not configured' };
+};
+
+// Send email using SendGrid
+const sendEmailWithSendGrid = async (to, subject, html, retries = 2) => {
+  const fromEmail = process.env.EMAIL_USER || process.env.SENDGRID_FROM_EMAIL || 'noreply@inkline-dvc.com';
+  const fromName = process.env.SENDGRID_FROM_NAME || 'InkLine DVC';
+
   for (let attempt = 1; attempt <= retries; attempt++) {
     try {
-      // Create a fresh transporter for each attempt to avoid connection issues
-      const transporter = getTransporter();
+      const msg = {
+        to,
+        from: {
+          email: fromEmail,
+          name: fromName
+        },
+        subject,
+        html
+      };
+
+      console.log(`📧 Sending email via SendGrid to: ${to} (attempt ${attempt}/${retries})`);
+      
+      const [response] = await sgMail.send(msg);
+      
+      console.log('✅ Email sent successfully via SendGrid to:', to);
+      console.log('   Status Code:', response.statusCode);
+      
+      return { 
+        success: true, 
+        messageId: response.headers['x-message-id'] || 'sent',
+        service: 'SendGrid'
+      };
+    } catch (error) {
+      const isLastAttempt = attempt === retries;
+
+      if (isLastAttempt) {
+        console.error('❌ SendGrid email sending failed after', retries, 'attempts:', error.message);
+        
+        if (error.response) {
+          console.error('   → SendGrid API Error:', JSON.stringify(error.response.body, null, 2));
+          console.error('   → Status Code:', error.response.statusCode);
+        }
+        
+        return { 
+          success: false, 
+          error: error.message,
+          service: 'SendGrid'
+        };
+      } else {
+        console.warn(`⚠️ SendGrid email sending attempt ${attempt} failed. Retrying... (${error.message})`);
+        await new Promise(resolve => setTimeout(resolve, 2000));
+      }
+    }
+  }
+
+  return { success: false, error: 'All retry attempts failed', service: 'SendGrid' };
+};
+
+// Send email using Gmail SMTP (fallback)
+const sendEmailWithGmail = async (to, subject, html, retries = 2) => {
+  for (let attempt = 1; attempt <= retries; attempt++) {
+    try {
+      const transporter = createGmailTransporter();
       
       if (!transporter) {
-        console.warn('⚠️ Email transporter not configured. Skipping email to:', to);
-        return { success: false, error: 'Email not configured' };
+        return { success: false, error: 'Gmail transporter not configured' };
       }
 
       const mailOptions = {
@@ -78,53 +127,31 @@ export const sendEmail = async (to, subject, html, retries = 2) => {
         html
       };
 
-      // Increase timeout to 30 seconds and add retry logic
       const sendPromise = transporter.sendMail(mailOptions);
       const timeoutPromise = new Promise((_, reject) => {
         setTimeout(() => reject(new Error('Email sending timeout')), 30000);
       });
 
       const info = await Promise.race([sendPromise, timeoutPromise]);
-      console.log('✉️ Email sent successfully to:', to);
+      console.log('✉️ Email sent successfully via Gmail SMTP to:', to);
       
-      // Close the transporter connection
       transporter.close();
       
-      return { success: true, messageId: info.messageId };
+      return { success: true, messageId: info.messageId, service: 'Gmail SMTP' };
     } catch (error) {
       const isLastAttempt = attempt === retries;
-      
+
       if (isLastAttempt) {
-        // Last attempt failed - log error and return
-        console.error('❌ Email sending failed after', retries, 'attempts:', error.message);
-        
-        // Provide helpful error messages
-        if (error.code === 'EAUTH') {
-          console.error('   → Authentication failed. Check your EMAIL_USER and EMAIL_PASS in Render');
-          console.error('   → For Gmail, you MUST use an App Password (not your regular password)');
-          console.error('   → Get App Password: https://myaccount.google.com/apppasswords');
-          console.error('   → Make sure 2-Step Verification is enabled on your Gmail account');
-        } else if (error.code === 'ECONNECTION' || error.message.includes('timeout')) {
-          console.error('   → Connection failed or timeout. This could be due to:');
-          console.error('      - Network/firewall blocking Gmail SMTP (ports 465/587)');
-          console.error('      - Gmail security settings blocking the connection');
-          console.error('      - Incorrect email credentials');
-          console.error('      - Render.com network restrictions');
-          console.error('   → Email will be skipped. System will continue to work.');
-        } else {
-          console.error('   → Error details:', error.code || error.message);
-        }
-        
-        return { success: false, error: error.message };
+        console.error('❌ Gmail SMTP email sending failed after', retries, 'attempts:', error.message);
+        return { success: false, error: error.message, service: 'Gmail SMTP' };
       } else {
-        // Not the last attempt - wait a bit and retry
-        console.warn(`⚠️ Email sending attempt ${attempt} failed. Retrying... (${error.message})`);
-        await new Promise(resolve => setTimeout(resolve, 2000)); // Wait 2 seconds before retry
+        console.warn(`⚠️ Gmail SMTP email sending attempt ${attempt} failed. Retrying... (${error.message})`);
+        await new Promise(resolve => setTimeout(resolve, 2000));
       }
     }
   }
-  
-  return { success: false, error: 'All retry attempts failed' };
+
+  return { success: false, error: 'All retry attempts failed', service: 'Gmail SMTP' };
 };
 
 export const sendAccountApprovedEmail = async (email, fullName) => {
@@ -503,4 +530,3 @@ export const sendWelcomeEmail = async (email, fullName, isBSIT) => {
     await sendEmail(email, subject, html);
   }
 };
-

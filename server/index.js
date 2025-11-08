@@ -197,19 +197,19 @@ if (process.env.NODE_ENV === 'production') {
   const clientBuildPath = path.join(__dirname, '../client/dist');
   
   // Check if dist folder exists
-  const fs = await import('fs');
   if (fs.existsSync(clientBuildPath)) {
     console.log('✅ Serving static files from:', clientBuildPath);
     app.use(express.static(clientBuildPath));
     
     // Serve React app for all non-API routes (after root route)
+    // Note: Root route is already handled above, so this catches other routes
     app.get('*', (req, res, next) => {
       // Don't serve React app for API routes
       if (req.path.startsWith('/api')) {
         return next();
       }
-      // Don't serve React app for health check
-      if (req.path === '/health') {
+      // Don't serve React app for health check or root (already handled)
+      if (req.path === '/health' || req.path === '/') {
         return next();
       }
       res.sendFile(path.join(clientBuildPath, 'index.html'));

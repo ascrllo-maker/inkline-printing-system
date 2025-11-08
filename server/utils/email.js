@@ -8,27 +8,28 @@ const createTransporter = () => {
     return null;
   }
 
-  // Use SMTP configuration instead of 'service: gmail' for more control
+  // Try port 587 (TLS) first - often works better with hosting providers
+  // If 587 fails, we can try 465 (SSL) as fallback
   // Gmail SMTP settings:
-  // - Host: smtp.gmail.com
-  // - Port: 465 (SSL) or 587 (TLS)
-  // - Secure: true for 465, false for 587
+  // - Port 587: TLS (more compatible with firewalls)
+  // - Port 465: SSL (sometimes blocked)
   return nodemailer.createTransport({
     host: 'smtp.gmail.com',
-    port: 465,
-    secure: true, // true for 465, false for other ports
+    port: 587, // Use TLS port (587) instead of SSL (465) - better compatibility
+    secure: false, // false for 587, true for 465
+    requireTLS: true, // Require TLS for port 587
     auth: {
       user: process.env.EMAIL_USER,
       pass: process.env.EMAIL_PASS
     },
-    // Connection timeout settings
-    connectionTimeout: 20000, // 20 seconds
-    socketTimeout: 20000, // 20 seconds
-    greetingTimeout: 20000, // 20 seconds
+    // Connection timeout settings - increased for better reliability
+    connectionTimeout: 30000, // 30 seconds
+    socketTimeout: 30000, // 30 seconds
+    greetingTimeout: 30000, // 30 seconds
     // TLS options
     tls: {
-      rejectUnauthorized: false // Allow self-signed certificates
-      // Don't specify ciphers - let Node.js use default secure ciphers
+      rejectUnauthorized: false, // Allow self-signed certificates
+      minVersion: 'TLSv1.2' // Use TLS 1.2 or higher
     },
     // Disable pooling - create fresh connection each time
     pool: false,
@@ -77,10 +78,10 @@ export const sendEmail = async (to, subject, html, retries = 2) => {
         html
       };
 
-      // Increase timeout to 20 seconds and add retry logic
+      // Increase timeout to 30 seconds and add retry logic
       const sendPromise = transporter.sendMail(mailOptions);
       const timeoutPromise = new Promise((_, reject) => {
-        setTimeout(() => reject(new Error('Email sending timeout')), 20000);
+        setTimeout(() => reject(new Error('Email sending timeout')), 30000);
       });
 
       const info = await Promise.race([sendPromise, timeoutPromise]);

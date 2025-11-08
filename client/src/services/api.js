@@ -1,6 +1,9 @@
 import axios from 'axios';
 
-const API_URL = import.meta.env.VITE_API_URL || 'http://localhost:5000/api';
+// Use relative URL in production (same origin), absolute in development
+// In production on Render, client and server are on the same domain
+const API_URL = import.meta.env.VITE_API_URL || 
+  (import.meta.env.PROD ? '/api' : 'http://localhost:5000/api');
 
 const api = axios.create({
   baseURL: API_URL,
@@ -30,7 +33,8 @@ export const authAPI = {
     if (data.idImage) {
       formData.append('idImage', data.idImage);
     }
-    return axios.post(`${API_URL}/auth/signup`, formData, {
+    // Use api instance to ensure relative URLs and proper baseURL handling
+    return api.post('/auth/signup', formData, {
       headers: { 'Content-Type': 'multipart/form-data' },
     });
   },

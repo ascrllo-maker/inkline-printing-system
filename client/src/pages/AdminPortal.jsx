@@ -678,7 +678,7 @@ export default function AdminPortal({ shop }) {
                               <td className="px-6 py-4">
                                 <div className="text-sm text-white">{order.fileName}</div>
                                 <a
-                                  href={`${import.meta.env.VITE_API_URL || 'http://localhost:5000'}${order.filePath}`}
+                                  href={order.filePath}
                                   target="_blank"
                                   rel="noopener noreferrer"
                                   className="inline-flex items-center space-x-2 text-blue-300 hover:text-blue-200 text-sm font-medium mt-2 px-3 py-1.5 rounded-lg bg-blue-600/30 hover:bg-blue-600/50 backdrop-blur-sm border border-blue-400/30 transition-all"
@@ -829,7 +829,7 @@ export default function AdminPortal({ shop }) {
                             <div className="mt-4">
                               <p className="text-sm font-medium text-white mb-2">DVC School ID:</p>
                               <img
-                                src={`${import.meta.env.VITE_API_URL || 'http://localhost:5000'}${account.idImage}`}
+                                src={account.idImage}
                                 alt="ID"
                                 className="max-w-md rounded-lg border border-white/30"
                               />

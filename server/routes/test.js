@@ -26,11 +26,11 @@ router.get('/email', async (req, res) => {
       });
     }
 
-    // Check if email is configured
-    if (!process.env.EMAIL_USER || !process.env.EMAIL_PASS) {
+    // Check if email is configured (SendGrid or Gmail)
+    if (!process.env.SENDGRID_API_KEY && (!process.env.EMAIL_USER || !process.env.EMAIL_PASS)) {
       return res.status(500).json({ 
         success: false, 
-        message: 'Email credentials not configured. Please set EMAIL_USER and EMAIL_PASS in Render environment variables.' 
+        message: 'Email credentials not configured. Please set SENDGRID_API_KEY (recommended) or EMAIL_USER and EMAIL_PASS in Render environment variables.' 
       });
     }
 
@@ -84,9 +84,10 @@ router.get('/email', async (req, res) => {
         success: true, 
         message: `Test email sent successfully to ${to}`,
         details: {
-          from: process.env.EMAIL_USER,
+          from: process.env.EMAIL_USER || process.env.SENDGRID_FROM_EMAIL || 'noreply@inkline-dvc.com',
           to: to,
           messageId: result.messageId,
+          service: result.service || 'Unknown',
           timestamp: new Date().toISOString()
         }
       });
@@ -96,8 +97,9 @@ router.get('/email', async (req, res) => {
         success: false, 
         message: 'Failed to send test email',
         error: result.error,
+        service: result.service || 'Unknown',
         details: {
-          from: process.env.EMAIL_USER,
+          from: process.env.EMAIL_USER || process.env.SENDGRID_FROM_EMAIL || 'noreply@inkline-dvc.com',
           to: to
         }
       });

@@ -310,10 +310,18 @@ export default function StudentPortal() {
     });
   };
 
-  const handlePrinterClick = (printer) => {
+  const handlePrinterClick = (printer, event) => {
+    // Prevent event bubbling
+    if (event) {
+      event.stopPropagation();
+    }
+    
     try {
+      console.log('Printer clicked:', printer?.name, printer);
+      
       if (!printer) {
         console.error('Printer is null or undefined');
+        toast.error('Invalid printer data');
         return;
       }
 
@@ -328,6 +336,8 @@ export default function StudentPortal() {
       const availableSizes = Array.isArray(paperSizes) 
         ? paperSizes.filter(ps => ps && ps.enabled !== false)
         : [];
+      
+      console.log('Available paper sizes for printer:', printer.name, availableSizes);
       
       if (availableSizes.length === 0) {
         console.error('Printer has no available paper sizes:', printer);
@@ -348,6 +358,8 @@ export default function StudentPortal() {
         ? currentSize 
         : (availableSizes[0]?.size || 'A4');
       
+      console.log('Paper size to use:', paperSizeToUse, 'Current:', currentSize, 'Available:', isCurrentSizeAvailable);
+      
       // Show info message if paper size was changed
       if (!isCurrentSizeAvailable && currentSize && paperSizeToUse !== currentSize) {
         toast.info(`Paper size set to ${paperSizeToUse} (${currentSize} not available for this printer)`);
@@ -359,6 +371,8 @@ export default function StudentPortal() {
         printerId: printer._id,
         paperSize: paperSizeToUse,
       });
+      
+      console.log('Printer selected successfully:', printer.name);
     } catch (error) {
       console.error('Error selecting printer:', error, printer);
       toast.error('Failed to select printer. Please try again.');
@@ -787,14 +801,20 @@ export default function StudentPortal() {
               return (
                 <div
                   key={printer._id}
-                  onClick={() => handlePrinterClick(printer)}
-                  className={`rounded-lg sm:rounded-xl p-4 sm:p-6 cursor-pointer transition-all touch-manipulation ${
+                  onClick={(e) => {
+                    e.preventDefault();
+                    e.stopPropagation();
+                    handlePrinterClick(printer, e);
+                  }}
+                  onMouseDown={(e) => e.stopPropagation()}
+                  className={`rounded-lg sm:rounded-xl p-4 sm:p-6 cursor-pointer transition-all touch-manipulation relative z-10 ${
                     isSelected
                       ? 'glass-strong border-2 sm:border-4 border-blue-400 shadow-2xl sm:scale-105 ring-2 sm:ring-4 ring-blue-300/50'
                       : isActive
                       ? 'glass-card border-2 border-transparent active:scale-[1.02] sm:hover:scale-105 sm:hover:border-blue-300/50'
                       : 'glass opacity-60 cursor-not-allowed border-2 border-gray-300/30'
                   }`}
+                  style={{ pointerEvents: isActive ? 'auto' : 'none' }}
                 >
                   <div className="flex justify-between items-start mb-3 sm:mb-4 gap-2">
                     <h4 className={`text-base sm:text-lg font-semibold flex-1 min-w-0 ${isSelected ? 'text-white' : 'text-white'}`}>

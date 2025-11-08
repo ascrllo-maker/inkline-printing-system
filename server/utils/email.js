@@ -224,86 +224,142 @@ export const sendAccountApprovedEmail = async (email, fullName) => {
 };
 
 export const sendOrderCreatedEmail = async (email, fullName, orderNumber, shop, queuePosition) => {
-  const subject = `InkLine - Order #${orderNumber} Created Successfully`;
+  const subject = `Your Printing Order #${orderNumber} Has Been Created`;
   
   const html = `
-    <div style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto; padding: 20px;">
-      <div style="background: linear-gradient(135deg, #3b82f6 0%, #2563eb 100%); padding: 30px; border-radius: 10px 10px 0 0; text-align: center;">
-        <h1 style="color: white; margin: 0;">Order Created!</h1>
-      </div>
-      <div style="background: #f9fafb; padding: 30px; border-radius: 0 0 10px 10px;">
-        <p style="color: #374151; font-size: 16px; line-height: 1.6;">Hi ${fullName},</p>
-        <p style="color: #374151; font-size: 16px; line-height: 1.6;">
-          Your printing order has been created successfully!
-        </p>
-        <div style="background: white; padding: 20px; border-radius: 8px; margin: 20px 0; border-left: 4px solid #3b82f6;">
-          <p style="margin: 0; color: #6b7280; font-size: 14px;">
-            <strong>Order Number:</strong> #${orderNumber}
-          </p>
-          <p style="margin: 10px 0 0 0; color: #6b7280; font-size: 14px;">
-            <strong>Shop:</strong> ${shop} Printing Shop
-          </p>
-          ${queuePosition ? `<p style="margin: 10px 0 0 0; color: #6b7280; font-size: 14px;"><strong>Queue Position:</strong> #${queuePosition}</p>` : ''}
-        </div>
-        <p style="color: #374151; font-size: 16px; line-height: 1.6;">
-          <strong>What happens next?</strong>
-        </p>
-        <ul style="color: #374151; font-size: 16px; line-height: 1.8;">
-          <li>Your order is now in the queue</li>
-          <li>You'll receive an email when your order starts printing</li>
-          <li>You'll receive another email when your order is ready for pickup</li>
-          <li>You can track your order status in your student portal</li>
-        </ul>
-        <p style="color: #374151; font-size: 16px; line-height: 1.6;">
-          We'll keep you updated via email on your order's progress. Thank you for using InkLine!
-        </p>
-        <p style="color: #6b7280; font-size: 14px; margin-top: 30px; padding-top: 20px; border-top: 1px solid #e5e7eb;">
-          Best regards,<br>
-          <strong>InkLine Team - DVC</strong>
-        </p>
-      </div>
-    </div>
+    <!DOCTYPE html>
+    <html>
+    <head>
+      <meta charset="utf-8">
+      <meta name="viewport" content="width=device-width, initial-scale=1.0">
+      <title>Order Created - InkLine</title>
+    </head>
+    <body style="margin: 0; padding: 0; font-family: Arial, sans-serif; background-color: #f3f4f6;">
+      <table role="presentation" style="width: 100%; border-collapse: collapse;">
+        <tr>
+          <td style="padding: 20px 0; text-align: center; background-color: #f3f4f6;">
+            <table role="presentation" style="width: 600px; margin: 0 auto; border-collapse: collapse; background-color: #ffffff; border-radius: 10px; overflow: hidden; box-shadow: 0 2px 4px rgba(0,0,0,0.1);">
+              <tr>
+                <td style="background: linear-gradient(135deg, #3b82f6 0%, #2563eb 100%); padding: 30px; text-align: center;">
+                  <h1 style="color: #ffffff; margin: 0; font-size: 24px; font-weight: 600;">Order Created Successfully</h1>
+                </td>
+              </tr>
+              <tr>
+                <td style="padding: 30px; background-color: #ffffff;">
+                  <p style="color: #374151; font-size: 16px; line-height: 1.6; margin: 0 0 16px 0;">Hello ${fullName},</p>
+                  <p style="color: #374151; font-size: 16px; line-height: 1.6; margin: 0 0 24px 0;">Your printing order has been created and is now in the queue.</p>
+                  <table role="presentation" style="width: 100%; border-collapse: collapse; background-color: #f9fafb; border-radius: 8px; padding: 20px; margin: 24px 0;">
+                    <tr>
+                      <td style="padding: 8px 0;">
+                        <strong style="color: #111827; font-size: 14px;">Order Number:</strong>
+                        <span style="color: #6b7280; font-size: 14px; margin-left: 8px;">#${orderNumber}</span>
+                      </td>
+                    </tr>
+                    <tr>
+                      <td style="padding: 8px 0;">
+                        <strong style="color: #111827; font-size: 14px;">Printing Shop:</strong>
+                        <span style="color: #6b7280; font-size: 14px; margin-left: 8px;">${shop} Printing Shop</span>
+                      </td>
+                    </tr>
+                    ${queuePosition ? `
+                    <tr>
+                      <td style="padding: 8px 0;">
+                        <strong style="color: #111827; font-size: 14px;">Queue Position:</strong>
+                        <span style="color: #6b7280; font-size: 14px; margin-left: 8px;">#${queuePosition}</span>
+                      </td>
+                    </tr>
+                    ` : ''}
+                  </table>
+                  <p style="color: #374151; font-size: 16px; line-height: 1.6; margin: 24px 0 16px 0;"><strong>What happens next?</strong></p>
+                  <ul style="color: #374151; font-size: 16px; line-height: 1.8; margin: 0 0 24px 0; padding-left: 24px;">
+                    <li>Your order is now in the queue</li>
+                    <li>You will receive an email when your order starts printing</li>
+                    <li>You will receive another email when your order is ready for pickup</li>
+                    <li>You can track your order status in your student portal</li>
+                  </ul>
+                  <p style="color: #374151; font-size: 16px; line-height: 1.6; margin: 24px 0 0 0;">We will keep you updated on your order's progress. Thank you for using InkLine!</p>
+                </td>
+              </tr>
+              <tr>
+                <td style="padding: 24px 30px; background-color: #f9fafb; border-top: 1px solid #e5e7eb; text-align: center;">
+                  <p style="color: #6b7280; font-size: 14px; margin: 0 0 8px 0;">Best regards,</p>
+                  <p style="color: #6b7280; font-size: 14px; margin: 0; font-weight: 600;">InkLine Team - DVC</p>
+                  <p style="color: #9ca3af; font-size: 12px; margin: 16px 0 0 0;">This is an automated email. Please do not reply to this message.</p>
+                </td>
+              </tr>
+            </table>
+          </td>
+        </tr>
+      </table>
+    </body>
+    </html>
   `;
   
   await sendEmail(email, subject, html);
 };
 
 export const sendOrderPrintingEmail = async (email, fullName, orderNumber, shop) => {
-  const subject = `InkLine - Order #${orderNumber} Now Printing`;
+  const subject = `Your Order #${orderNumber} is Now Printing`;
   
   const html = `
-    <div style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto; padding: 20px;">
-      <div style="background: linear-gradient(135deg, #f59e0b 0%, #d97706 100%); padding: 30px; border-radius: 10px 10px 0 0; text-align: center;">
-        <h1 style="color: white; margin: 0;">Order Now Printing!</h1>
-      </div>
-      <div style="background: #f9fafb; padding: 30px; border-radius: 0 0 10px 10px;">
-        <p style="color: #374151; font-size: 16px; line-height: 1.6;">Hi ${fullName},</p>
-        <p style="color: #374151; font-size: 16px; line-height: 1.6;">
-          Great news! Your printing order is now being processed.
-        </p>
-        <div style="background: white; padding: 20px; border-radius: 8px; margin: 20px 0; border-left: 4px solid #f59e0b;">
-          <p style="margin: 0; color: #6b7280; font-size: 14px;">
-            <strong>Order Number:</strong> #${orderNumber}
-          </p>
-          <p style="margin: 10px 0 0 0; color: #6b7280; font-size: 14px;">
-            <strong>Shop:</strong> ${shop} Printing Shop
-          </p>
-          <p style="margin: 10px 0 0 0; color: #6b7280; font-size: 14px;">
-            <strong>Status:</strong> Printing
-          </p>
-        </div>
-        <p style="color: #374151; font-size: 16px; line-height: 1.6;">
-          Your order is currently being printed. You'll receive another email notification when it's ready for pickup.
-        </p>
-        <p style="color: #374151; font-size: 16px; line-height: 1.6;">
-          Thank you for using InkLine!
-        </p>
-        <p style="color: #6b7280; font-size: 14px; margin-top: 30px; padding-top: 20px; border-top: 1px solid #e5e7eb;">
-          Best regards,<br>
-          <strong>InkLine Team - DVC</strong>
-        </p>
-      </div>
-    </div>
+    <!DOCTYPE html>
+    <html>
+    <head>
+      <meta charset="utf-8">
+      <meta name="viewport" content="width=device-width, initial-scale=1.0">
+      <title>Order Printing - InkLine</title>
+    </head>
+    <body style="margin: 0; padding: 0; font-family: Arial, sans-serif; background-color: #f3f4f6;">
+      <table role="presentation" style="width: 100%; border-collapse: collapse;">
+        <tr>
+          <td style="padding: 20px 0; text-align: center;">
+            <table role="presentation" style="width: 600px; margin: 0 auto; border-collapse: collapse; background-color: #ffffff; border-radius: 10px; overflow: hidden; box-shadow: 0 2px 4px rgba(0,0,0,0.1);">
+              <tr>
+                <td style="background: linear-gradient(135deg, #f59e0b 0%, #d97706 100%); padding: 30px; text-align: center;">
+                  <h1 style="color: #ffffff; margin: 0; font-size: 24px; font-weight: 600;">Order Now Printing</h1>
+                </td>
+              </tr>
+              <tr>
+                <td style="padding: 30px; background-color: #ffffff;">
+                  <p style="color: #374151; font-size: 16px; line-height: 1.6; margin: 0 0 16px 0;">Hello ${fullName},</p>
+                  <p style="color: #374151; font-size: 16px; line-height: 1.6; margin: 0 0 24px 0;">Great news! Your printing order is now being processed.</p>
+                  <table role="presentation" style="width: 100%; border-collapse: collapse; background-color: #f9fafb; border-radius: 8px; padding: 20px; margin: 24px 0;">
+                    <tr>
+                      <td style="padding: 8px 0;">
+                        <strong style="color: #111827; font-size: 14px;">Order Number:</strong>
+                        <span style="color: #6b7280; font-size: 14px; margin-left: 8px;">#${orderNumber}</span>
+                      </td>
+                    </tr>
+                    <tr>
+                      <td style="padding: 8px 0;">
+                        <strong style="color: #111827; font-size: 14px;">Printing Shop:</strong>
+                        <span style="color: #6b7280; font-size: 14px; margin-left: 8px;">${shop} Printing Shop</span>
+                      </td>
+                    </tr>
+                    <tr>
+                      <td style="padding: 8px 0;">
+                        <strong style="color: #111827; font-size: 14px;">Status:</strong>
+                        <span style="color: #f59e0b; font-size: 14px; margin-left: 8px; font-weight: 600;">Printing</span>
+                      </td>
+                    </tr>
+                  </table>
+                  <p style="color: #374151; font-size: 16px; line-height: 1.6; margin: 24px 0 0 0;">Your order is currently being printed. You will receive another email notification when it is ready for pickup.</p>
+                  <p style="color: #374151; font-size: 16px; line-height: 1.6; margin: 24px 0 0 0;">Thank you for using InkLine!</p>
+                </td>
+              </tr>
+              <tr>
+                <td style="padding: 24px 30px; background-color: #f9fafb; border-top: 1px solid #e5e7eb; text-align: center;">
+                  <p style="color: #6b7280; font-size: 14px; margin: 0 0 8px 0;">Best regards,</p>
+                  <p style="color: #6b7280; font-size: 14px; margin: 0; font-weight: 600;">InkLine Team - DVC</p>
+                  <p style="color: #9ca3af; font-size: 12px; margin: 16px 0 0 0;">This is an automated email. Please do not reply to this message.</p>
+                </td>
+              </tr>
+            </table>
+          </td>
+        </tr>
+      </table>
+    </body>
+    </html>
   `;
   
   await sendEmail(email, subject, html);

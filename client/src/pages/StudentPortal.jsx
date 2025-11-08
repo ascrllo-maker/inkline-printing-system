@@ -802,20 +802,25 @@ export default function StudentPortal() {
                 <div
                   key={printer._id}
                   onClick={(e) => {
-                    e.preventDefault();
-                    e.stopPropagation();
-                    handlePrinterClick(printer, e);
+                    // Allow click on the entire card
+                    if (isActive) {
+                      handlePrinterClick(printer, e);
+                    }
                   }}
-                  onMouseDown={(e) => e.stopPropagation()}
-                  className={`rounded-lg sm:rounded-xl p-4 sm:p-6 cursor-pointer transition-all touch-manipulation relative z-10 ${
+                  className={`rounded-lg sm:rounded-xl p-4 sm:p-6 transition-all touch-manipulation relative ${
+                    isActive ? 'cursor-pointer' : 'cursor-not-allowed'
+                  } ${
                     isSelected
                       ? 'glass-strong border-2 sm:border-4 border-blue-400 shadow-2xl sm:scale-105 ring-2 sm:ring-4 ring-blue-300/50'
                       : isActive
                       ? 'glass-card border-2 border-transparent active:scale-[1.02] sm:hover:scale-105 sm:hover:border-blue-300/50'
-                      : 'glass opacity-60 cursor-not-allowed border-2 border-gray-300/30'
+                      : 'glass opacity-60 border-2 border-gray-300/30'
                   }`}
                 >
-                  <div className="flex justify-between items-start mb-3 sm:mb-4 gap-2">
+                  <div 
+                    className="flex justify-between items-start mb-3 sm:mb-4 gap-2"
+                    onClick={(e) => isActive && e.stopPropagation()}
+                  >
                     <h4 className={`text-base sm:text-lg font-semibold flex-1 min-w-0 ${isSelected ? 'text-white' : 'text-white'}`}>
                       <span className="truncate block">{printer.name}</span>
                       {isSelected && (
@@ -823,7 +828,7 @@ export default function StudentPortal() {
                       )}
                     </h4>
                     <span
-                      className={`px-2 sm:px-3 py-1 rounded-full text-xs font-medium flex-shrink-0 ${
+                      className={`px-2 sm:px-3 py-1 rounded-full text-xs font-medium flex-shrink-0 pointer-events-none ${
                         printer.status === 'Active'
                           ? 'bg-green-300/80 text-green-900'
                           : printer.status === 'Offline'
@@ -834,9 +839,11 @@ export default function StudentPortal() {
                       {printer.status}
                     </span>
                   </div>
-                  <div className={`rounded-lg p-3 sm:p-4 text-center glass ${
-                    isSelected ? '' : ''
-                  }`}>
+                  <div 
+                    className={`rounded-lg p-3 sm:p-4 text-center glass pointer-events-none ${
+                      isSelected ? '' : ''
+                    }`}
+                  >
                     <p className={`text-xs sm:text-sm mb-1 text-white/90`}>Queue</p>
                     <p className={`text-2xl sm:text-3xl font-bold text-white`}>
                       {printer.queueCount || 0}

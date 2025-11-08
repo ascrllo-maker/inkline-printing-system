@@ -1,0 +1,16 @@
+<svg width="120" height="100" viewBox="0 0 120 100" xmlns="http://www.w3.org/2000/svg">
+  <!-- Ink Cartridge (dark teal blue rectangles stacked) -->
+  <rect x="35" y="5" width="50" height="10" rx="2" fill="#1e4d72"/>
+  <rect x="35" y="15" width="50" height="10" fill="#1e4d72"/>
+  <rect x="35" y="25" width="50" height="10" fill="#1e4d72"/>
+  
+  <!-- Ink Drips -->
+  <!-- Magenta drip (left) -->
+  <path d="M 42 35 Q 42 42, 38 47 Q 34 52, 38 57 Q 42 62, 42 68" stroke="#e91e63" stroke-width="7" fill="none" stroke-linecap="round"/>
+  
+  <!-- Cyan drip (center) -->
+  <circle cx="60" cy="52" r="5" fill="#00bcd4"/>
+  
+  <!-- Yellow drip (right) -->
+  <path d="M 78 35 Q 78 42, 82 47 Q 86 52, 82 57 Q 78 62, 78 68" stroke="#ffc107" stroke-width="7" fill="none" stroke-linecap="round"/>
+</svg>

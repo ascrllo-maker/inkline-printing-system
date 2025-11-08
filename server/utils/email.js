@@ -109,7 +109,7 @@ const sendEmailWithSendGrid = async (to, subject, html, retries = 2) => {
           'X-Auto-Response-Suppress': 'All', // Suppress auto-responders
           'Auto-Submitted': 'auto-generated', // Indicate automated email
           'X-Mailer': 'InkLine Printing System', // Identify the sender
-          'Message-ID': `<${Date.now()}-${Math.random().toString(36).substring(7)}@inkline-dvc.com>`, // Unique message ID
+          'Message-ID': `<${Date.now()}-${Math.random().toString(36).substring(7)}@${fromEmail.split('@')[1]}>`, // Unique message ID using authenticated domain
           'Date': new Date().toUTCString() // Proper date header
         },
         // Add categories for better tracking and deliverability

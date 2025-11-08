@@ -37,12 +37,29 @@ router.post('/create', protect, uploadFile.single('file'), async (req, res) => {
     }
 
     // Check if paper size is available
-    const paperSizeAvailable = printer.availablePaperSizes.find(
-      ps => ps.size === paperSize && ps.enabled
-    );
+    // Normalize comparison: trim whitespace and compare case-insensitively
+    const normalizedPaperSize = paperSize ? paperSize.trim() : '';
+    const paperSizeAvailable = printer.availablePaperSizes.find(ps => {
+      const normalizedDbSize = ps.size ? ps.size.trim() : '';
+      return normalizedDbSize.toLowerCase() === normalizedPaperSize.toLowerCase() && ps.enabled;
+    });
 
     if (!paperSizeAvailable) {
-      return res.status(400).json({ message: 'Selected paper size is not available' });
+      // Log for debugging
+      console.log('Paper size validation failed:', {
+        requested: paperSize,
+        normalized: normalizedPaperSize,
+        availableSizes: printer.availablePaperSizes.map(ps => ({
+          size: ps.size,
+          enabled: ps.enabled
+        }))
+      });
+      return res.status(400).json({ 
+        message: 'Selected paper size is not available',
+        availableSizes: printer.availablePaperSizes
+          .filter(ps => ps.enabled)
+          .map(ps => ps.size)
+      });
     }
 
     // Generate unique order number

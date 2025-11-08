@@ -55,10 +55,30 @@ export const sendEmail = async (to, subject, html, retries = 2) => {
   return { success: false, error: 'Email not configured' };
 };
 
+// Convert HTML to plain text (simple version)
+const htmlToText = (html) => {
+  return html
+    .replace(/<style[^>]*>.*?<\/style>/gi, '')
+    .replace(/<script[^>]*>.*?<\/script>/gi, '')
+    .replace(/<[^>]+>/g, '')
+    .replace(/&nbsp;/g, ' ')
+    .replace(/&amp;/g, '&')
+    .replace(/&lt;/g, '<')
+    .replace(/&gt;/g, '>')
+    .replace(/&quot;/g, '"')
+    .replace(/&#39;/g, "'")
+    .replace(/\s+/g, ' ')
+    .trim();
+};
+
 // Send email using SendGrid
 const sendEmailWithSendGrid = async (to, subject, html, retries = 2) => {
   const fromEmail = process.env.EMAIL_USER || process.env.SENDGRID_FROM_EMAIL || 'noreply@inkline-dvc.com';
   const fromName = process.env.SENDGRID_FROM_NAME || 'InkLine DVC';
+  const replyTo = process.env.EMAIL_USER || process.env.SENDGRID_FROM_EMAIL || fromEmail;
+
+  // Convert HTML to plain text for better deliverability
+  const text = htmlToText(html);
 
   for (let attempt = 1; attempt <= retries; attempt++) {
     try {
@@ -68,8 +88,39 @@ const sendEmailWithSendGrid = async (to, subject, html, retries = 2) => {
           email: fromEmail,
           name: fromName
         },
+        replyTo: {
+          email: replyTo,
+          name: fromName
+        },
         subject,
-        html
+        text, // Plain text version (required for better deliverability)
+        html, // HTML version
+        // Add custom headers to improve deliverability
+        headers: {
+          'X-Entity-Ref-ID': `inkline-${Date.now()}`,
+          'List-Unsubscribe': `<mailto:${replyTo}?subject=Unsubscribe>`,
+          'List-Unsubscribe-Post': 'List-Unsubscribe=One-Click'
+        },
+        // Add categories for better tracking and deliverability
+        categories: ['inkline-printing-system'],
+        // Mail settings for better deliverability
+        mailSettings: {
+          sandboxMode: {
+            enable: false // Make sure sandbox mode is disabled
+          }
+        },
+        // Tracking settings
+        trackingSettings: {
+          clickTracking: {
+            enable: true
+          },
+          openTracking: {
+            enable: true
+          },
+          subscriptionTracking: {
+            enable: false // Disable subscription tracking for better deliverability
+          }
+        }
       };
 
       console.log(`📧 Sending email via SendGrid to: ${to} (attempt ${attempt}/${retries})`);
@@ -259,40 +310,63 @@ export const sendOrderPrintingEmail = async (email, fullName, orderNumber, shop)
 };
 
 export const sendOrderReadyEmail = async (email, fullName, orderNumber, shop) => {
-  const subject = `InkLine - Order #${orderNumber} Ready for Pickup`;
+  const subject = `Your Order #${orderNumber} is Ready for Pickup`;
   const paymentNote = shop === 'SSC' ? ' and Payment' : '';
   
   const html = `
-    <div style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto; padding: 20px;">
-      <div style="background: linear-gradient(135deg, #10b981 0%, #059669 100%); padding: 30px; border-radius: 10px 10px 0 0; text-align: center;">
-        <h1 style="color: white; margin: 0;">Order Ready for Pickup${paymentNote}!</h1>
-      </div>
-      <div style="background: #f9fafb; padding: 30px; border-radius: 0 0 10px 10px;">
-        <p style="color: #374151; font-size: 16px; line-height: 1.6;">Hi ${fullName},</p>
-        <p style="color: #374151; font-size: 16px; line-height: 1.6;">
-          Great news! Your printing order is ready for pickup${paymentNote.toLowerCase()}!
-        </p>
-        <div style="background: white; padding: 20px; border-radius: 8px; margin: 20px 0; border-left: 4px solid #10b981;">
-          <p style="margin: 0; color: #6b7280; font-size: 14px;">
-            <strong>Order Number:</strong> #${orderNumber}
-          </p>
-          <p style="margin: 10px 0 0 0; color: #6b7280; font-size: 14px;">
-            <strong>Shop:</strong> ${shop} Printing Shop
-          </p>
-        </div>
-        <p style="color: #374151; font-size: 16px; line-height: 1.6;">
-          Please visit the <strong>${shop} Printing Shop</strong> to collect your order.
-        </p>
-        ${shop === 'SSC' ? '<p style="color: #374151; font-size: 16px; line-height: 1.6;"><strong>Note:</strong> Payment is required upon pickup.</p>' : ''}
-        <p style="color: #374151; font-size: 16px; line-height: 1.6;">
-          Thank you for using InkLine!
-        </p>
-        <p style="color: #6b7280; font-size: 14px; margin-top: 30px; padding-top: 20px; border-top: 1px solid #e5e7eb;">
-          Best regards,<br>
-          <strong>InkLine Team - DVC</strong>
-        </p>
-      </div>
-    </div>
+    <!DOCTYPE html>
+    <html>
+    <head>
+      <meta charset="utf-8">
+      <meta name="viewport" content="width=device-width, initial-scale=1.0">
+      <title>Order Ready - InkLine</title>
+    </head>
+    <body style="margin: 0; padding: 0; font-family: Arial, sans-serif; background-color: #f3f4f6;">
+      <table role="presentation" style="width: 100%; border-collapse: collapse;">
+        <tr>
+          <td style="padding: 20px 0; text-align: center;">
+            <table role="presentation" style="width: 600px; margin: 0 auto; border-collapse: collapse; background-color: #ffffff; border-radius: 10px; overflow: hidden; box-shadow: 0 2px 4px rgba(0,0,0,0.1);">
+              <tr>
+                <td style="background: linear-gradient(135deg, #10b981 0%, #059669 100%); padding: 30px; text-align: center;">
+                  <h1 style="color: #ffffff; margin: 0; font-size: 24px; font-weight: 600;">Order Ready for Pickup${paymentNote}!</h1>
+                </td>
+              </tr>
+              <tr>
+                <td style="padding: 30px; background-color: #ffffff;">
+                  <p style="color: #374151; font-size: 16px; line-height: 1.6; margin: 0 0 16px 0;">Hello ${fullName},</p>
+                  <p style="color: #374151; font-size: 16px; line-height: 1.6; margin: 0 0 24px 0;">Great news! Your printing order is ready for pickup${paymentNote.toLowerCase()}!</p>
+                  <table role="presentation" style="width: 100%; border-collapse: collapse; background-color: #f9fafb; border-radius: 8px; padding: 20px; margin: 24px 0;">
+                    <tr>
+                      <td style="padding: 8px 0;">
+                        <strong style="color: #111827; font-size: 14px;">Order Number:</strong>
+                        <span style="color: #6b7280; font-size: 14px; margin-left: 8px;">#${orderNumber}</span>
+                      </td>
+                    </tr>
+                    <tr>
+                      <td style="padding: 8px 0;">
+                        <strong style="color: #111827; font-size: 14px;">Printing Shop:</strong>
+                        <span style="color: #6b7280; font-size: 14px; margin-left: 8px;">${shop} Printing Shop</span>
+                      </td>
+                    </tr>
+                  </table>
+                  <p style="color: #374151; font-size: 16px; line-height: 1.6; margin: 24px 0 16px 0;">Please visit the <strong>${shop} Printing Shop</strong> to collect your order.</p>
+                  ${shop === 'SSC' ? '<p style="color: #374151; font-size: 16px; line-height: 1.6; margin: 16px 0 24px 0; padding: 16px; background-color: #fef3c7; border-radius: 8px; border-left: 4px solid #f59e0b;"><strong>Note:</strong> Payment is required upon pickup.</p>' : ''}
+                  <p style="color: #374151; font-size: 16px; line-height: 1.6; margin: 24px 0 0 0;">Thank you for using InkLine!</p>
+                </td>
+              </tr>
+              <tr>
+                <td style="padding: 24px 30px; background-color: #f9fafb; border-top: 1px solid #e5e7eb; text-align: center;">
+                  <p style="color: #6b7280; font-size: 14px; margin: 0 0 8px 0;">Best regards,</p>
+                  <p style="color: #6b7280; font-size: 14px; margin: 0; font-weight: 600;">InkLine Team - DVC</p>
+                  <p style="color: #9ca3af; font-size: 12px; margin: 16px 0 0 0;">This is an automated email. Please do not reply to this message.</p>
+                </td>
+              </tr>
+            </table>
+          </td>
+        </tr>
+      </table>
+    </body>
+    </html>
   `;
   
   await sendEmail(email, subject, html);

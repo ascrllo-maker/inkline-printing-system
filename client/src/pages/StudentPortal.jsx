@@ -311,42 +311,58 @@ export default function StudentPortal() {
   };
 
   const handlePrinterClick = (printer) => {
-    if (printer.status !== 'Active') {
-      toast.error('This printer is not available');
-      return;
+    try {
+      if (!printer) {
+        console.error('Printer is null or undefined');
+        return;
+      }
+
+      if (printer.status !== 'Active') {
+        toast.error('This printer is not available');
+        return;
+      }
+      
+      // Safely get available paper sizes for this printer
+      // Handle cases where availablePaperSizes might be undefined, null, or not an array
+      const paperSizes = printer.availablePaperSizes || [];
+      const availableSizes = Array.isArray(paperSizes) 
+        ? paperSizes.filter(ps => ps && ps.enabled !== false)
+        : [];
+      
+      if (availableSizes.length === 0) {
+        console.error('Printer has no available paper sizes:', printer);
+        toast.error('This printer has no available paper sizes. Please contact the administrator.');
+        return;
+      }
+      
+      // Check if current paper size is available for this printer
+      const currentSize = orderForm.paperSize || 'A4';
+      const isCurrentSizeAvailable = availableSizes.some(ps => {
+        if (!ps || !ps.size) return false;
+        // Case-insensitive comparison
+        return ps.size.toLowerCase() === (currentSize || '').toLowerCase();
+      });
+      
+      // If current paper size is not available, use the first available size
+      const paperSizeToUse = isCurrentSizeAvailable && currentSize
+        ? currentSize 
+        : (availableSizes[0]?.size || 'A4');
+      
+      // Show info message if paper size was changed
+      if (!isCurrentSizeAvailable && currentSize && paperSizeToUse !== currentSize) {
+        toast.info(`Paper size set to ${paperSizeToUse} (${currentSize} not available for this printer)`);
+      }
+      
+      setSelectedPrinter(printer);
+      setOrderForm({
+        ...orderForm,
+        printerId: printer._id,
+        paperSize: paperSizeToUse,
+      });
+    } catch (error) {
+      console.error('Error selecting printer:', error, printer);
+      toast.error('Failed to select printer. Please try again.');
     }
-    
-    // Get available paper sizes for this printer
-    const availableSizes = printer.availablePaperSizes.filter(ps => ps.enabled);
-    
-    if (availableSizes.length === 0) {
-      toast.error('This printer has no available paper sizes');
-      return;
-    }
-    
-    // Check if current paper size is available for this printer
-    const currentSize = orderForm.paperSize;
-    const isCurrentSizeAvailable = availableSizes.some(ps => {
-      // Case-insensitive comparison
-      return ps.size.toLowerCase() === currentSize.toLowerCase();
-    });
-    
-    // If current paper size is not available, use the first available size
-    const paperSizeToUse = isCurrentSizeAvailable 
-      ? currentSize 
-      : availableSizes[0].size;
-    
-    // Show info message if paper size was changed
-    if (!isCurrentSizeAvailable && currentSize) {
-      toast.info(`Paper size set to ${paperSizeToUse} (${currentSize} not available for this printer)`);
-    }
-    
-    setSelectedPrinter(printer);
-    setOrderForm({
-      ...orderForm,
-      printerId: printer._id,
-      paperSize: paperSizeToUse,
-    });
   };
 
   const handleCreateOrder = async (e) => {

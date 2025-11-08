@@ -8,37 +8,48 @@ const createTransporter = () => {
     return null;
   }
 
+  // Use SMTP configuration instead of 'service: gmail' for more control
+  // Gmail SMTP settings:
+  // - Host: smtp.gmail.com
+  // - Port: 465 (SSL) or 587 (TLS)
+  // - Secure: true for 465, false for 587
   return nodemailer.createTransport({
-    service: 'gmail',
+    host: 'smtp.gmail.com',
+    port: 465,
+    secure: true, // true for 465, false for other ports
     auth: {
       user: process.env.EMAIL_USER,
       pass: process.env.EMAIL_PASS
     },
-    // Additional options for better reliability in production
-    pool: false, // Disable pooling to avoid connection issues
-    // Add connection timeout settings
-    connectionTimeout: 10000, // 10 seconds
-    socketTimeout: 10000, // 10 seconds
-    greetingTimeout: 10000, // 10 seconds
-    // Fix certificate issues
+    // Connection timeout settings
+    connectionTimeout: 20000, // 20 seconds
+    socketTimeout: 20000, // 20 seconds
+    greetingTimeout: 20000, // 20 seconds
+    // TLS options
     tls: {
-      rejectUnauthorized: false
-    }
+      rejectUnauthorized: false // Allow self-signed certificates
+      // Don't specify ciphers - let Node.js use default secure ciphers
+    },
+    // Disable pooling - create fresh connection each time
+    pool: false,
+    // Retry options
+    maxRetries: 0, // We handle retries manually
+    // Debug mode (set to true for detailed logs)
+    debug: false,
+    logger: false
   });
 };
 
-// Create transporter - will be recreated if env vars change
-let transporter = createTransporter();
+// Create a fresh transporter for each email to avoid connection issues
+// This ensures we don't have stale connections or connection pooling problems
+const getTransporter = () => {
+  return createTransporter();
+};
 
-export const sendEmail = async (to, subject, html) => {
-  // Recreate transporter if it doesn't exist (in case env vars were set after module load)
-  if (!transporter) {
-    transporter = createTransporter();
-  }
-  
+export const sendEmail = async (to, subject, html, retries = 2) => {
   // Check if email is configured
-  if (!transporter) {
-    console.warn('⚠️ Email transporter not configured. Skipping email to:', to);
+  if (!process.env.EMAIL_USER || !process.env.EMAIL_PASS) {
+    console.warn('⚠️ Email credentials not configured. Skipping email to:', to);
     return { success: false, error: 'Email not configured' };
   }
 
@@ -48,36 +59,71 @@ export const sendEmail = async (to, subject, html) => {
     return { success: false, error: 'Invalid email address' };
   }
 
-  try {
-    const mailOptions = {
-      from: `InkLine DVC <${process.env.EMAIL_USER}>`,
-      to,
-      subject,
-      html
-    };
+  // Try sending email with retries
+  for (let attempt = 1; attempt <= retries; attempt++) {
+    try {
+      // Create a fresh transporter for each attempt to avoid connection issues
+      const transporter = getTransporter();
+      
+      if (!transporter) {
+        console.warn('⚠️ Email transporter not configured. Skipping email to:', to);
+        return { success: false, error: 'Email not configured' };
+      }
 
-    // Add timeout to email sending (10 seconds)
-    const sendPromise = transporter.sendMail(mailOptions);
-    const timeoutPromise = new Promise((_, reject) => {
-      setTimeout(() => reject(new Error('Email sending timeout')), 10000);
-    });
+      const mailOptions = {
+        from: `InkLine DVC <${process.env.EMAIL_USER}>`,
+        to,
+        subject,
+        html
+      };
 
-    const info = await Promise.race([sendPromise, timeoutPromise]);
-    console.log('✉️ Email sent successfully to:', to);
-    return { success: true, messageId: info.messageId };
-  } catch (error) {
-    console.error('❌ Email sending failed:', error.message);
-    
-    // Provide helpful error messages
-    if (error.code === 'EAUTH') {
-      console.error('   → Authentication failed. Check your EMAIL_USER and EMAIL_PASS in .env');
-      console.error('   → For Gmail, you may need to use an App Password instead of your regular password');
-    } else if (error.code === 'ECONNECTION' || error.message.includes('timeout')) {
-      console.error('   → Connection failed or timeout. Email will be skipped.');
+      // Increase timeout to 20 seconds and add retry logic
+      const sendPromise = transporter.sendMail(mailOptions);
+      const timeoutPromise = new Promise((_, reject) => {
+        setTimeout(() => reject(new Error('Email sending timeout')), 20000);
+      });
+
+      const info = await Promise.race([sendPromise, timeoutPromise]);
+      console.log('✉️ Email sent successfully to:', to);
+      
+      // Close the transporter connection
+      transporter.close();
+      
+      return { success: true, messageId: info.messageId };
+    } catch (error) {
+      const isLastAttempt = attempt === retries;
+      
+      if (isLastAttempt) {
+        // Last attempt failed - log error and return
+        console.error('❌ Email sending failed after', retries, 'attempts:', error.message);
+        
+        // Provide helpful error messages
+        if (error.code === 'EAUTH') {
+          console.error('   → Authentication failed. Check your EMAIL_USER and EMAIL_PASS in Render');
+          console.error('   → For Gmail, you MUST use an App Password (not your regular password)');
+          console.error('   → Get App Password: https://myaccount.google.com/apppasswords');
+          console.error('   → Make sure 2-Step Verification is enabled on your Gmail account');
+        } else if (error.code === 'ECONNECTION' || error.message.includes('timeout')) {
+          console.error('   → Connection failed or timeout. This could be due to:');
+          console.error('      - Network/firewall blocking Gmail SMTP (ports 465/587)');
+          console.error('      - Gmail security settings blocking the connection');
+          console.error('      - Incorrect email credentials');
+          console.error('      - Render.com network restrictions');
+          console.error('   → Email will be skipped. System will continue to work.');
+        } else {
+          console.error('   → Error details:', error.code || error.message);
+        }
+        
+        return { success: false, error: error.message };
+      } else {
+        // Not the last attempt - wait a bit and retry
+        console.warn(`⚠️ Email sending attempt ${attempt} failed. Retrying... (${error.message})`);
+        await new Promise(resolve => setTimeout(resolve, 2000)); // Wait 2 seconds before retry
+      }
     }
-    
-    return { success: false, error: error.message };
   }
+  
+  return { success: false, error: 'All retry attempts failed' };
 };
 
 export const sendAccountApprovedEmail = async (email, fullName) => {

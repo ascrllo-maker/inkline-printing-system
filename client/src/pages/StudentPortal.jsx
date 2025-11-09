@@ -509,14 +509,49 @@ export default function StudentPortal() {
       }
       
       // Ensure we have a valid printer ID
-      const printerId = printer._id?.toString ? printer._id.toString() : String(printer._id || '');
-      if (!printerId) {
-        console.error('❌ Invalid printer ID after conversion');
+      let printerId;
+      try {
+        if (printer._id) {
+          if (typeof printer._id === 'string') {
+            printerId = printer._id;
+          } else if (printer._id.toString) {
+            printerId = printer._id.toString();
+          } else if (printer._id._id) {
+            // Handle nested _id (sometimes MongoDB returns this)
+            printerId = String(printer._id._id);
+          } else {
+            printerId = String(printer._id);
+          }
+        } else {
+          console.error('❌ Printer _id is missing or falsy');
+          toast.error('Invalid printer ID. Please try again.');
+          return;
+        }
+      } catch (idError) {
+        console.error('❌ Error converting printer ID:', idError);
         toast.error('Invalid printer ID. Please try again.');
         return;
       }
       
-      setSelectedPrinter(printer);
+      if (!printerId || printerId === 'undefined' || printerId === 'null') {
+        console.error('❌ Invalid printer ID after conversion:', printerId);
+        console.error('Original _id:', printer._id);
+        console.error('Printer:', printer);
+        toast.error('Invalid printer ID. Please try again.');
+        return;
+      }
+      
+      // Create a clean printer object for state (avoid circular references)
+      const cleanPrinter = {
+        _id: printerId,
+        name: String(printer.name || ''),
+        status: String(printer.status || ''),
+        shop: String(printer.shop || ''),
+        availablePaperSizes: availableSizes,
+        queueCount: Number(printer.queueCount || 0)
+      };
+      
+      setSelectedPrinter(cleanPrinter);
       setOrderForm(prevForm => ({
         ...prevForm,
         printerId: printerId,

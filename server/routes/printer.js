@@ -15,9 +15,23 @@ router.get('/:shop', protect, async (req, res) => {
       return res.status(400).json({ message: 'Invalid shop name' });
     }
 
-    const printers = await Printer.find({ shop }).sort({ createdAt: 1 });
-    res.json(printers);
+    // Use lean() for faster queries and ensure all fields are populated
+    const printers = await Printer.find({ shop })
+      .lean()
+      .sort({ createdAt: 1 });
+    
+    // Ensure all printers have valid availablePaperSizes array
+    const normalizedPrinters = printers.map(printer => ({
+      ...printer,
+      availablePaperSizes: Array.isArray(printer.availablePaperSizes) 
+        ? printer.availablePaperSizes 
+        : [],
+      queueCount: printer.queueCount || 0
+    }));
+    
+    res.json(normalizedPrinters);
   } catch (error) {
+    console.error('Error fetching printers:', error);
     res.status(500).json({ message: 'Server error', error: error.message });
   }
 });

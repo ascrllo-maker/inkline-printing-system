@@ -9,17 +9,20 @@ const orderSchema = new mongoose.Schema({
   userId: {
     type: mongoose.Schema.Types.ObjectId,
     ref: 'User',
-    required: true
+    required: true,
+    index: true // Add index for faster user queries
   },
   printerId: {
     type: mongoose.Schema.Types.ObjectId,
     ref: 'Printer',
-    required: true
+    required: true,
+    index: true // Add index for faster printer queries
   },
   shop: {
     type: String,
     enum: ['IT', 'SSC'],
-    required: true
+    required: true,
+    index: true // Add index for faster shop queries
   },
   fileName: {
     type: String,
@@ -51,7 +54,8 @@ const orderSchema = new mongoose.Schema({
   status: {
     type: String,
     enum: ['In Queue', 'Printing', 'Ready for Pickup', 'Ready for Pickup & Payment', 'Completed', 'Cancelled'],
-    default: 'In Queue'
+    default: 'In Queue',
+    index: true // Add index for faster status queries
   },
   queuePosition: {
     type: Number,
@@ -59,13 +63,19 @@ const orderSchema = new mongoose.Schema({
   },
   createdAt: {
     type: Date,
-    default: Date.now
+    default: Date.now,
+    index: true // Add index for faster date sorting
   },
   completedAt: {
     type: Date,
     default: null
   }
 });
+
+// Create compound indexes for common query patterns
+orderSchema.index({ printerId: 1, status: 1, createdAt: 1 }); // For queue position calculations
+orderSchema.index({ shop: 1, status: 1, createdAt: -1 }); // For admin order listings
+orderSchema.index({ userId: 1, shop: 1 }); // For user's orders by shop
 
 export default mongoose.model('Order', orderSchema);
 

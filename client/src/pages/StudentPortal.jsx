@@ -34,7 +34,11 @@ export default function StudentPortal() {
   const isBannedFromSSC = Array.isArray(bannedFrom) && bannedFrom.includes('SSC');
 
   useEffect(() => {
-    loadNotifications();
+    // Defer notification loading to not block initial render
+    const notificationTimer = setTimeout(() => {
+      loadNotifications();
+    }, 500); // Load after 500ms delay
+    
     if (currentView === 'shop' && selectedShop) {
       try {
         loadShopData();
@@ -43,6 +47,10 @@ export default function StudentPortal() {
         toast.error('Failed to load shop data');
       }
     }
+    
+    return () => {
+      clearTimeout(notificationTimer);
+    };
   }, [currentView, selectedShop]);
 
   // Socket.IO setup for real-time updates
@@ -56,21 +64,30 @@ export default function StudentPortal() {
 
     // Listen for printer updates
     socket.on('printer_updated', (printer) => {
+      // Validate printer data structure
+      if (!printer || !printer._id || !printer.shop) {
+        console.warn('Invalid printer data received:', printer);
+        return;
+      }
+
       if (printer.shop === selectedShop) {
         setPrinters(prev => {
           const exists = prev.find(p => p._id === printer._id);
           if (exists) {
-            const updated = prev.map(p => p._id === printer._id ? printer : p);
-            return updated;
+            // Update existing printer
+            return prev.map(p => p._id === printer._id ? printer : p);
+          } else {
+            // Add printer if it doesn't exist (race condition fix)
+            console.log('Adding new printer from socket update:', printer.name);
+            return [...prev, printer];
           }
-          return prev;
         });
         
         // Update selected printer if it's the one being updated
         setSelectedPrinter(prev => {
           if (prev && prev._id === printer._id) {
             // If the current paper size is no longer available, reset to first available
-            const availableSizes = printer.availablePaperSizes.filter(ps => ps.enabled);
+            const availableSizes = (printer.availablePaperSizes || []).filter(ps => ps && ps.enabled);
             if (availableSizes.length > 0) {
               setOrderForm(currentForm => {
                 const currentSize = currentForm.paperSize;
@@ -93,10 +110,17 @@ export default function StudentPortal() {
     });
 
     socket.on('printer_created', (printer) => {
+      // Validate printer data structure
+      if (!printer || !printer._id || !printer.shop) {
+        console.warn('Invalid printer data received:', printer);
+        return;
+      }
+
       if (printer.shop === selectedShop) {
         setPrinters(prev => {
           const exists = prev.find(p => p._id === printer._id);
           if (!exists) {
+            console.log('Adding new printer from socket:', printer.name);
             return [...prev, printer];
           }
           return prev;
@@ -232,11 +256,33 @@ export default function StudentPortal() {
     }
     try {
       setLoading(true);
+      console.log('Loading shop data for:', selectedShop);
+      
       const [printersRes, ordersRes] = await Promise.all([
         printerAPI.getPrinters(selectedShop),
         orderAPI.getMyOrders(),
       ]);
-      setPrinters(printersRes.data || []);
+      
+      // Validate and normalize printer data
+      const printers = (printersRes.data || []).map(printer => {
+        // Ensure all required fields exist
+        if (!printer.availablePaperSizes || !Array.isArray(printer.availablePaperSizes)) {
+          console.warn('Printer missing availablePaperSizes:', printer.name, printer);
+          return {
+            ...printer,
+            availablePaperSizes: [],
+            queueCount: printer.queueCount || 0
+          };
+        }
+        return {
+          ...printer,
+          queueCount: printer.queueCount || 0
+        };
+      });
+      
+      console.log('Loaded printers:', printers.length, printers.map(p => ({ name: p.name, status: p.status, id: p._id })));
+      
+      setPrinters(printers);
       setOrders((ordersRes.data || []).filter(o => o.shop === selectedShop));
     } catch (error) {
       console.error('Error loading shop data:', error);
@@ -317,16 +363,27 @@ export default function StudentPortal() {
     }
     
     try {
-      console.log('Printer clicked:', printer?.name, printer);
+      console.log('=== PRINTER CLICK DEBUG ===');
+      console.log('Printer clicked:', printer?.name);
+      console.log('Printer ID:', printer?._id);
+      console.log('Printer status:', printer?.status);
+      console.log('Printer data:', JSON.stringify(printer, null, 2));
       
       if (!printer) {
-        console.error('Printer is null or undefined');
+        console.error('❌ Printer is null or undefined');
         toast.error('Invalid printer data');
         return;
       }
 
+      if (!printer._id) {
+        console.error('❌ Printer missing _id:', printer);
+        toast.error('Invalid printer data: missing ID');
+        return;
+      }
+
       if (printer.status !== 'Active') {
-        toast.error('This printer is not available');
+        console.warn('⚠️ Printer not active:', printer.status);
+        toast.error(`This printer is not available (Status: ${printer.status})`);
         return;
       }
       
@@ -334,13 +391,15 @@ export default function StudentPortal() {
       // Handle cases where availablePaperSizes might be undefined, null, or not an array
       const paperSizes = printer.availablePaperSizes || [];
       const availableSizes = Array.isArray(paperSizes) 
-        ? paperSizes.filter(ps => ps && ps.enabled !== false)
+        ? paperSizes.filter(ps => ps && ps.enabled !== false && ps.size)
         : [];
       
-      console.log('Available paper sizes for printer:', printer.name, availableSizes);
+      console.log('Available paper sizes:', availableSizes.map(ps => ps.size));
+      console.log('Paper sizes array:', paperSizes);
       
       if (availableSizes.length === 0) {
-        console.error('Printer has no available paper sizes:', printer);
+        console.error('❌ Printer has no available paper sizes');
+        console.error('Printer data:', printer);
         toast.error('This printer has no available paper sizes. Please contact the administrator.');
         return;
       }
@@ -349,8 +408,8 @@ export default function StudentPortal() {
       const currentSize = orderForm.paperSize || 'A4';
       const isCurrentSizeAvailable = availableSizes.some(ps => {
         if (!ps || !ps.size) return false;
-        // Case-insensitive comparison
-        return ps.size.toLowerCase() === (currentSize || '').toLowerCase();
+        // Case-insensitive comparison with trim
+        return ps.size.trim().toLowerCase() === (currentSize || '').trim().toLowerCase();
       });
       
       // If current paper size is not available, use the first available size
@@ -358,7 +417,10 @@ export default function StudentPortal() {
         ? currentSize 
         : (availableSizes[0]?.size || 'A4');
       
-      console.log('Paper size to use:', paperSizeToUse, 'Current:', currentSize, 'Available:', isCurrentSizeAvailable);
+      console.log('Paper size selection:');
+      console.log('  Current:', currentSize);
+      console.log('  Available:', isCurrentSizeAvailable);
+      console.log('  Selected:', paperSizeToUse);
       
       // Show info message if paper size was changed
       if (!isCurrentSizeAvailable && currentSize && paperSizeToUse !== currentSize) {
@@ -372,9 +434,11 @@ export default function StudentPortal() {
         paperSize: paperSizeToUse,
       });
       
-      console.log('Printer selected successfully:', printer.name);
+      console.log('✅ Printer selected successfully:', printer.name);
+      console.log('=== END PRINTER CLICK DEBUG ===');
     } catch (error) {
-      console.error('Error selecting printer:', error, printer);
+      console.error('❌ Error selecting printer:', error);
+      console.error('Printer data:', printer);
       toast.error('Failed to select printer. Please try again.');
     }
   };

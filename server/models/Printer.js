@@ -8,12 +8,14 @@ const printerSchema = new mongoose.Schema({
   shop: {
     type: String,
     enum: ['IT', 'SSC'],
-    required: true
+    required: true,
+    index: true // Add index for faster queries
   },
   status: {
     type: String,
     enum: ['Active', 'Offline', 'No Ink/Paper'],
-    default: 'Active'
+    default: 'Active',
+    index: true // Add index for faster status filtering
   },
   availablePaperSizes: [{
     size: {
@@ -34,6 +36,9 @@ const printerSchema = new mongoose.Schema({
     default: Date.now
   }
 });
+
+// Create compound index for shop and status queries
+printerSchema.index({ shop: 1, status: 1 });
 
 export default mongoose.model('Printer', printerSchema);
 

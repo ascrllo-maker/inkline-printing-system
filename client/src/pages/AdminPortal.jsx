@@ -109,9 +109,14 @@ export default function AdminPortal({ shop }) {
       }
 
       // Construct the authenticated file URL
-      // File path is like: /uploads/files/filename
+      // File path can be:
+      // - /uploads/files/filename (legacy filesystem path)
+      // - /gridfs/fileId (GridFS path)
       // Remove leading slash for the API endpoint
-      const cleanPath = filePath.startsWith('/') ? filePath.slice(1) : filePath;
+      let cleanPath = filePath.startsWith('/') ? filePath.slice(1) : filePath;
+      
+      // If it's already a GridFS path, use it directly
+      // Otherwise, the backend will check for GridFS file ID in the order
       const API_URL = import.meta.env.VITE_API_URL || 
         (import.meta.env.PROD ? '/api' : 'http://localhost:5000/api');
       

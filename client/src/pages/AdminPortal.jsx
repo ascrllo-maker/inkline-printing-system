@@ -1016,8 +1016,15 @@ export default function AdminPortal({ shop }) {
 
         {/* Content */}
         <div className="mt-6">
+          {/* Loading indicator - show when any tab is loading */}
+          {tabLoading && (
+            <div className="flex items-center justify-center py-12">
+              <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-white"></div>
+            </div>
+          )}
+          
           {/* ORDERS Tab */}
-          {activeTab === 'ORDERS' && (
+          {activeTab === 'ORDERS' && !tabLoading && (
             <div>
               <h2 className="text-2xl font-bold mb-4 text-white drop-shadow-md">Orders</h2>
               
@@ -1230,7 +1237,7 @@ export default function AdminPortal({ shop }) {
           )}
 
           {/* APPROVE ACCOUNTS Tab (IT Admin only) */}
-          {activeTab === 'APPROVE ACCOUNTS' && isITAdmin && (
+          {activeTab === 'APPROVE ACCOUNTS' && isITAdmin && !tabLoading && (
             <div>
               <h2 className="text-2xl font-bold mb-4 text-white drop-shadow-md">Pending Account Approvals</h2>
               {pendingAccounts.length === 0 ? (
@@ -1282,7 +1289,7 @@ export default function AdminPortal({ shop }) {
           )}
 
           {/* STUDENT USERS Tab */}
-          {activeTab === 'STUDENT USERS' && (
+          {activeTab === 'STUDENT USERS' && !tabLoading && (
             <div>
               <h2 className="text-2xl font-bold mb-4 text-white drop-shadow-md">Student Users</h2>
               {users.length === 0 ? (
@@ -1364,7 +1371,7 @@ export default function AdminPortal({ shop }) {
           )}
 
           {/* PRINTERS Tab */}
-          {activeTab === 'PRINTERS' && (
+          {activeTab === 'PRINTERS' && !tabLoading && (
             <div>
               <div className="flex justify-between items-center mb-4">
                 <h2 className="text-2xl font-bold text-white drop-shadow-md">Printers</h2>
@@ -1481,7 +1488,7 @@ export default function AdminPortal({ shop }) {
           )}
 
           {/* USER VIOLATIONS Tab */}
-          {activeTab === 'USER VIOLATIONS' && (
+          {activeTab === 'USER VIOLATIONS' && !tabLoading && (
             <div>
               <h2 className="text-2xl font-bold mb-4 text-white drop-shadow-md">User Violations</h2>
               {violations.length === 0 ? (

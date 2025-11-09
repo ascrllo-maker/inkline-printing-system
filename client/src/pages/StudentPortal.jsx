@@ -263,21 +263,54 @@ export default function StudentPortal() {
         orderAPI.getMyOrders(),
       ]);
       
-      // Validate and normalize printer data
+      // Validate and normalize printer data - convert to plain objects
       const printers = (printersRes.data || []).map(printer => {
-        // Ensure all required fields exist
-        if (!printer.availablePaperSizes || !Array.isArray(printer.availablePaperSizes)) {
-          console.warn('Printer missing availablePaperSizes:', printer.name, printer);
+        try {
+          // Convert to plain object if it's a Mongoose document or has getters
+          let plainPrinter;
+          try {
+            // Try to convert if it has toObject method (Mongoose document)
+            plainPrinter = printer.toObject ? printer.toObject() : { ...printer };
+          } catch {
+            // Fallback: manually extract properties
+            plainPrinter = {
+              _id: printer._id,
+              name: printer.name,
+              shop: printer.shop,
+              status: printer.status,
+              availablePaperSizes: printer.availablePaperSizes,
+              queueCount: printer.queueCount || 0,
+              createdAt: printer.createdAt
+            };
+          }
+          
+          // Ensure all required fields exist
+          if (!plainPrinter.availablePaperSizes || !Array.isArray(plainPrinter.availablePaperSizes)) {
+            console.warn('Printer missing availablePaperSizes:', plainPrinter.name);
+            plainPrinter.availablePaperSizes = [];
+          }
+          
+          // Normalize paper sizes
+          plainPrinter.availablePaperSizes = plainPrinter.availablePaperSizes.map(ps => ({
+            size: String(ps?.size || '').trim(),
+            enabled: ps?.enabled !== false
+          })).filter(ps => ps.size.length > 0);
+          
+          plainPrinter.queueCount = plainPrinter.queueCount || 0;
+          
+          return plainPrinter;
+        } catch (error) {
+          console.error('Error normalizing printer:', error, printer);
+          // Return a minimal valid printer object
           return {
-            ...printer,
+            _id: printer?._id || 'unknown',
+            name: printer?.name || 'Unknown Printer',
+            shop: printer?.shop || selectedShop,
+            status: printer?.status || 'Offline',
             availablePaperSizes: [],
-            queueCount: printer.queueCount || 0
+            queueCount: 0
           };
         }
-        return {
-          ...printer,
-          queueCount: printer.queueCount || 0
-        };
       });
       
       console.log('Loaded printers:', printers.length, printers.map(p => ({ name: p.name, status: p.status, id: p._id })));
@@ -360,6 +393,7 @@ export default function StudentPortal() {
     // Prevent event bubbling
     if (event) {
       event.stopPropagation();
+      event.preventDefault();
     }
     
     try {
@@ -367,7 +401,27 @@ export default function StudentPortal() {
       console.log('Printer clicked:', printer?.name);
       console.log('Printer ID:', printer?._id);
       console.log('Printer status:', printer?.status);
-      console.log('Printer data:', JSON.stringify(printer, null, 2));
+      
+      // Safely stringify printer data (handle circular references)
+      try {
+        const printerData = {
+          _id: printer?._id,
+          name: printer?.name,
+          status: printer?.status,
+          shop: printer?.shop,
+          availablePaperSizes: printer?.availablePaperSizes,
+          queueCount: printer?.queueCount
+        };
+        console.log('Printer data:', JSON.stringify(printerData, null, 2));
+      } catch (stringifyError) {
+        console.log('Printer data (safe view):', {
+          _id: printer?._id,
+          name: printer?.name,
+          status: printer?.status,
+          shop: printer?.shop,
+          paperSizesCount: printer?.availablePaperSizes?.length || 0
+        });
+      }
       
       if (!printer) {
         console.error('❌ Printer is null or undefined');
@@ -376,7 +430,8 @@ export default function StudentPortal() {
       }
 
       if (!printer._id) {
-        console.error('❌ Printer missing _id:', printer);
+        console.error('❌ Printer missing _id');
+        console.error('Printer keys:', Object.keys(printer || {}));
         toast.error('Invalid printer data: missing ID');
         return;
       }
@@ -389,27 +444,53 @@ export default function StudentPortal() {
       
       // Safely get available paper sizes for this printer
       // Handle cases where availablePaperSizes might be undefined, null, or not an array
-      const paperSizes = printer.availablePaperSizes || [];
-      const availableSizes = Array.isArray(paperSizes) 
-        ? paperSizes.filter(ps => ps && ps.enabled !== false && ps.size)
-        : [];
+      let paperSizes = [];
+      try {
+        paperSizes = printer.availablePaperSizes || [];
+        if (!Array.isArray(paperSizes)) {
+          console.warn('⚠️ availablePaperSizes is not an array:', typeof paperSizes, paperSizes);
+          paperSizes = [];
+        }
+      } catch (paperSizeError) {
+        console.error('❌ Error accessing availablePaperSizes:', paperSizeError);
+        paperSizes = [];
+      }
+      
+      const availableSizes = paperSizes
+        .filter(ps => {
+          try {
+            return ps && ps.enabled !== false && ps.size && typeof ps.size === 'string';
+          } catch {
+            return false;
+          }
+        })
+        .map(ps => ({
+          size: String(ps.size).trim(),
+          enabled: ps.enabled !== false
+        }));
       
       console.log('Available paper sizes:', availableSizes.map(ps => ps.size));
-      console.log('Paper sizes array:', paperSizes);
+      console.log('Paper sizes array length:', paperSizes.length);
       
       if (availableSizes.length === 0) {
         console.error('❌ Printer has no available paper sizes');
-        console.error('Printer data:', printer);
+        console.error('Printer name:', printer.name);
+        console.error('Printer ID:', printer._id);
+        console.error('Paper sizes raw:', paperSizes);
         toast.error('This printer has no available paper sizes. Please contact the administrator.');
         return;
       }
       
       // Check if current paper size is available for this printer
-      const currentSize = orderForm.paperSize || 'A4';
+      const currentSize = (orderForm.paperSize || 'A4').trim();
       const isCurrentSizeAvailable = availableSizes.some(ps => {
-        if (!ps || !ps.size) return false;
-        // Case-insensitive comparison with trim
-        return ps.size.trim().toLowerCase() === (currentSize || '').trim().toLowerCase();
+        try {
+          const psSize = String(ps.size || '').trim().toLowerCase();
+          const currSize = String(currentSize || '').trim().toLowerCase();
+          return psSize === currSize && psSize.length > 0;
+        } catch {
+          return false;
+        }
       });
       
       // If current paper size is not available, use the first available size
@@ -427,19 +508,39 @@ export default function StudentPortal() {
         toast.info(`Paper size set to ${paperSizeToUse} (${currentSize} not available for this printer)`);
       }
       
+      // Ensure we have a valid printer ID
+      const printerId = printer._id?.toString ? printer._id.toString() : String(printer._id || '');
+      if (!printerId) {
+        console.error('❌ Invalid printer ID after conversion');
+        toast.error('Invalid printer ID. Please try again.');
+        return;
+      }
+      
       setSelectedPrinter(printer);
-      setOrderForm({
-        ...orderForm,
-        printerId: printer._id,
+      setOrderForm(prevForm => ({
+        ...prevForm,
+        printerId: printerId,
         paperSize: paperSizeToUse,
-      });
+      }));
       
       console.log('✅ Printer selected successfully:', printer.name);
       console.log('=== END PRINTER CLICK DEBUG ===');
     } catch (error) {
       console.error('❌ Error selecting printer:', error);
-      console.error('Printer data:', printer);
-      toast.error('Failed to select printer. Please try again.');
+      console.error('Error name:', error?.name);
+      console.error('Error message:', error?.message);
+      console.error('Error stack:', error?.stack);
+      console.error('Printer name:', printer?.name);
+      console.error('Printer ID:', printer?._id);
+      console.error('Printer type:', typeof printer);
+      console.error('Printer keys:', printer ? Object.keys(printer) : 'N/A');
+      
+      // More specific error message
+      if (error?.message) {
+        toast.error(`Failed to select printer: ${error.message}`);
+      } else {
+        toast.error('Failed to select printer. Please try again.');
+      }
     }
   };
 

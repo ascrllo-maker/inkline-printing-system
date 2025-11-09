@@ -118,11 +118,17 @@ export default function AdminPortal({ shop }) {
         throw new Error('Failed to load file');
       }
 
-      // Get the file as a blob
+      // Get the content type from response headers
+      const contentType = response.headers.get('content-type') || 'application/octet-stream';
+      
+      // Get the file as a blob with the correct MIME type
       const blob = await response.blob();
       
+      // Create a new blob with the explicit content type to ensure browser renders it correctly
+      const typedBlob = new Blob([blob], { type: contentType });
+      
       // Create a temporary URL for the blob
-      const blobUrl = window.URL.createObjectURL(blob);
+      const blobUrl = window.URL.createObjectURL(typedBlob);
       
       // Open the file in a new tab
       const newWindow = window.open(blobUrl, '_blank', 'noopener,noreferrer');
@@ -140,7 +146,7 @@ export default function AdminPortal({ shop }) {
       }
       
       // Clean up the blob URL after a delay to allow the new tab to load
-      // Note: We wait 5 seconds to ensure the new tab has loaded the blob URL
+      // Note: We wait 10 seconds to ensure the new tab has fully loaded the blob URL
       // The browser will clean up blob URLs when tabs are closed, but we revoke
       // to prevent memory leaks if many files are opened
       setTimeout(() => {
@@ -149,7 +155,7 @@ export default function AdminPortal({ shop }) {
         } catch (e) {
           // Ignore errors if URL was already revoked
         }
-      }, 5000);
+      }, 10000);
       
       toast.success('File opened in new tab');
     } catch (error) {

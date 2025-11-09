@@ -154,22 +154,14 @@ export default function AdminPortal({ shop }) {
       if (!response.ok) {
         toast.dismiss(loadingToast);
         const errorText = await response.text();
-        console.error('File fetch error:', response.status, errorText);
+        if (process.env.NODE_ENV === 'development') {
+          console.error('File fetch error:', response.status, errorText);
+        }
         throw new Error(`Failed to load file: ${response.status} ${response.statusText}`);
       }
 
       // Get content type from response headers first
       let contentType = response.headers.get('content-type');
-      const contentLength = response.headers.get('content-length');
-      const contentDisposition = response.headers.get('content-disposition');
-      
-      console.log('Response headers:', {
-        contentType,
-        contentLength,
-        contentDisposition,
-        status: response.status,
-        statusText: response.statusText
-      });
       
       // If content-type is missing or generic, try to infer from file extension
       if (!contentType || contentType === 'application/octet-stream') {
@@ -192,7 +184,6 @@ export default function AdminPortal({ shop }) {
         };
         if (extension && mimeTypes[extension]) {
           contentType = mimeTypes[extension];
-          console.log('Inferred content type from extension:', contentType);
         } else {
           contentType = 'application/octet-stream';
         }
@@ -265,7 +256,9 @@ export default function AdminPortal({ shop }) {
           
           // Don't revoke the blob URL - let the browser handle cleanup when the tab closes
         } catch (error) {
-          console.error('Error opening PDF in new window:', error);
+          if (process.env.NODE_ENV === 'development') {
+            console.error('Error opening PDF:', error);
+          }
           toast.dismiss(loadingToast);
           toast.error('Failed to open file. Please try downloading instead.');
           URL.revokeObjectURL(blobUrl);
@@ -313,7 +306,9 @@ export default function AdminPortal({ shop }) {
           toast.dismiss(loadingToast);
           toast.success('Image opened in new tab');
         } catch (error) {
-          console.error('Error opening image:', error);
+          if (process.env.NODE_ENV === 'development') {
+            console.error('Error opening image:', error);
+          }
           toast.dismiss(loadingToast);
           toast.error('Failed to open image');
           URL.revokeObjectURL(blobUrl);
@@ -356,7 +351,9 @@ export default function AdminPortal({ shop }) {
           toast.success('Text file opened in new tab');
           URL.revokeObjectURL(blobUrl);
         } catch (error) {
-          console.error('Error opening text file:', error);
+          if (process.env.NODE_ENV === 'development') {
+            console.error('Error opening text file:', error);
+          }
           // Fall through to download
         }
       }
@@ -380,7 +377,9 @@ export default function AdminPortal({ shop }) {
             URL.revokeObjectURL(blobUrl);
           }, 1000);
         } catch (error) {
-          console.error('Error downloading file:', error);
+          if (process.env.NODE_ENV === 'development') {
+            console.error('Error downloading file:', error);
+          }
           toast.dismiss(loadingToast);
           toast.error('Failed to download file');
           URL.revokeObjectURL(blobUrl);
@@ -388,13 +387,9 @@ export default function AdminPortal({ shop }) {
       }
       
     } catch (error) {
-      console.error('Error opening file:', error);
-      console.error('Error details:', {
-        message: error.message,
-        stack: error.stack,
-        filePath: filePath,
-        fileName: fileName
-      });
+      if (process.env.NODE_ENV === 'development') {
+        console.error('Error opening file:', error);
+      }
       
       toast.dismiss(loadingToast);
       
@@ -409,7 +404,7 @@ export default function AdminPortal({ shop }) {
         toast.error(`Failed to open file: ${error.message}`);
       }
     }
-  };
+  }, []);
 
   // Socket.IO setup for real-time updates
   useEffect(() => {

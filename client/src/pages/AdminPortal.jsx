@@ -210,81 +210,174 @@ export default function AdminPortal({ shop }) {
       // Determine file type
       const isPDF = contentType === 'application/pdf';
       const isImage = contentType.startsWith('image/');
+      const isText = contentType.startsWith('text/');
       
-      if (isPDF || isImage) {
-        // For PDFs, use a more reliable method: create an iframe or object
-        // First, try opening in a new window with the blob URL
-        const newWindow = window.open('', '_blank', 'noopener,noreferrer');
-        
-        if (!newWindow) {
+      console.log('Opening file:', {
+        fileName,
+        contentType,
+        isPDF,
+        isImage,
+        isText,
+        blobSize: blob.size,
+        blobUrl
+      });
+      
+      if (isPDF) {
+        // For PDFs, open the blob URL directly in a new window
+        // This is the most reliable method across browsers
+        try {
+          const newWindow = window.open(blobUrl, '_blank', 'noopener,noreferrer');
+          
+          if (!newWindow) {
+            toast.dismiss(loadingToast);
+            toast.error('Popup blocked. Please allow popups for this site.');
+            URL.revokeObjectURL(blobUrl);
+            return;
+          }
+          
+          // Monitor if the window loads successfully
+          const checkWindow = setInterval(() => {
+            try {
+              if (newWindow.closed) {
+                clearInterval(checkWindow);
+                console.log('File viewer window was closed');
+              }
+            } catch (e) {
+              // Cross-origin check failed, but window is likely open
+              clearInterval(checkWindow);
+            }
+          }, 1000);
+          
+          // Clear the interval after 10 seconds
+          setTimeout(() => clearInterval(checkWindow), 10000);
+          
           toast.dismiss(loadingToast);
-          toast.error('Popup blocked. Please allow popups for this site.');
+          toast.success('File opened in new tab');
+          
+          // Don't revoke the blob URL - let the browser handle cleanup when the tab closes
+          // Store reference to prevent garbage collection (optional)
+          console.log('PDF opened successfully in new window');
+        } catch (error) {
+          console.error('Error opening PDF in new window:', error);
+          toast.dismiss(loadingToast);
+          toast.error('Failed to open file. Please try downloading instead.');
           URL.revokeObjectURL(blobUrl);
-          return;
         }
-        
-        // Write the PDF content to the new window
-        newWindow.document.write(`
-          <!DOCTYPE html>
-          <html>
-            <head>
-              <title>${fileName || 'Document'}</title>
-              <style>
-                body {
-                  margin: 0;
-                  padding: 0;
-                  overflow: hidden;
-                }
-                embed {
-                  width: 100%;
-                  height: 100vh;
-                  border: none;
-                }
-                iframe {
-                  width: 100%;
-                  height: 100vh;
-                  border: none;
-                }
-              </style>
-            </head>
-            <body>
-              <embed src="${blobUrl}" type="${contentType}" />
-              <iframe src="${blobUrl}" style="display: none;"></iframe>
-              <script>
-                // Fallback: if embed doesn't work, use iframe
-                setTimeout(function() {
-                  var embed = document.querySelector('embed');
-                  var iframe = document.querySelector('iframe');
-                  if (embed && embed.offsetHeight === 0) {
-                    embed.style.display = 'none';
-                    iframe.style.display = 'block';
+      } else if (isImage) {
+        // For images, create a new window with the image
+        try {
+          const imgWindow = window.open('', '_blank', 'noopener,noreferrer');
+          if (!imgWindow) {
+            toast.dismiss(loadingToast);
+            toast.error('Popup blocked. Please allow popups for this site.');
+            URL.revokeObjectURL(blobUrl);
+            return;
+          }
+          
+          imgWindow.document.write(`
+            <!DOCTYPE html>
+            <html>
+              <head>
+                <title>${fileName || 'Image'}</title>
+                <style>
+                  body {
+                    margin: 0;
+                    padding: 20px;
+                    display: flex;
+                    justify-content: center;
+                    align-items: center;
+                    min-height: 100vh;
+                    background: #1a1a1a;
                   }
-                }, 100);
-              </script>
-            </body>
-          </html>
-        `);
-        newWindow.document.close();
-        
-        toast.dismiss(loadingToast);
-        toast.success('File opened in new tab');
-      } else {
-        // For other file types, create a download link
-        const link = document.createElement('a');
-        link.href = blobUrl;
-        link.download = fileName || 'file';
-        link.style.display = 'none';
-        document.body.appendChild(link);
-        link.click();
-        document.body.removeChild(link);
-        
-        toast.dismiss(loadingToast);
-        toast.success('File download started');
-        
-        // Revoke blob URL after a short delay for downloads
-        setTimeout(() => {
+                  img {
+                    max-width: 100%;
+                    max-height: 100vh;
+                    object-fit: contain;
+                  }
+                </style>
+              </head>
+              <body>
+                <img src="${blobUrl}" alt="${fileName || 'Image'}" />
+              </body>
+            </html>
+          `);
+          imgWindow.document.close();
+          
+          toast.dismiss(loadingToast);
+          toast.success('Image opened in new tab');
+        } catch (error) {
+          console.error('Error opening image:', error);
+          toast.dismiss(loadingToast);
+          toast.error('Failed to open image');
           URL.revokeObjectURL(blobUrl);
-        }, 1000);
+        }
+      } else if (isText) {
+        // For text files, open in a new window with formatted text
+        try {
+          const text = await blob.text();
+          const textWindow = window.open('', '_blank', 'noopener,noreferrer');
+          if (!textWindow) {
+            toast.dismiss(loadingToast);
+            toast.error('Popup blocked. Please allow popups for this site.');
+            URL.revokeObjectURL(blobUrl);
+            return;
+          }
+          
+          textWindow.document.write(`
+            <!DOCTYPE html>
+            <html>
+              <head>
+                <title>${fileName || 'Text File'}</title>
+                <style>
+                  body {
+                    margin: 0;
+                    padding: 20px;
+                    font-family: monospace;
+                    background: #1a1a1a;
+                    color: #fff;
+                    white-space: pre-wrap;
+                    word-wrap: break-word;
+                  }
+                </style>
+              </head>
+              <body>${text.replace(/</g, '&lt;').replace(/>/g, '&gt;')}</body>
+            </html>
+          `);
+          textWindow.document.close();
+          
+          toast.dismiss(loadingToast);
+          toast.success('Text file opened in new tab');
+          URL.revokeObjectURL(blobUrl);
+        } catch (error) {
+          console.error('Error opening text file:', error);
+          // Fall through to download
+        }
+      }
+      
+      // For all other file types (or if opening failed), download the file
+      if (!isPDF && !isImage && !isText) {
+        try {
+          const link = document.createElement('a');
+          link.href = blobUrl;
+          link.download = fileName || 'file';
+          link.style.display = 'none';
+          document.body.appendChild(link);
+          link.click();
+          document.body.removeChild(link);
+          
+          toast.dismiss(loadingToast);
+          toast.success('File download started');
+          
+          // Revoke blob URL after download starts
+          setTimeout(() => {
+            URL.revokeObjectURL(blobUrl);
+          }, 1000);
+        } catch (error) {
+          console.error('Error downloading file:', error);
+          toast.dismiss(loadingToast);
+          toast.error('Failed to download file');
+          URL.revokeObjectURL(blobUrl);
+        }
       }
       
     } catch (error) {

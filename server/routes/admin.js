@@ -835,34 +835,76 @@ router.get('/file/*', protect, async (req, res) => {
 
     // Check if this is a GridFS file path
     if (filePath.startsWith('gridfs/')) {
-      const fileId = filePath.replace('gridfs/', '');
+      const fileId = filePath.replace('gridfs/', '').trim();
+      
+      console.log('GridFS file path detected:', {
+        filePath,
+        fileId,
+        isValidObjectId: mongoose.Types.ObjectId.isValid(fileId)
+      });
       
       // Validate ObjectId
       if (!mongoose.Types.ObjectId.isValid(fileId)) {
+        console.error('Invalid GridFS file ID:', fileId);
         return res.status(400).json({ message: 'Invalid file ID' });
       }
 
       try {
         const gridFSBucket = new GridFSBucket(mongoose.connection.db, { bucketName: 'uploads' });
+        const objectId = new mongoose.Types.ObjectId(fileId);
+        
+        console.log('Looking for GridFS file with ID:', objectId.toString());
         
         // Find file metadata
-        const files = await gridFSBucket.find({ _id: new mongoose.Types.ObjectId(fileId) }).toArray();
+        const files = await gridFSBucket.find({ _id: objectId }).toArray();
+        
+        console.log('GridFS files found:', files.length);
         
         if (files.length === 0) {
-          return res.status(404).json({ message: 'File not found in GridFS' });
+          console.error('File not found in GridFS with ID:', objectId.toString());
+          // Try to find order by gridfsFileId to provide better error message
+          const orderByFileId = await Order.findOne({ gridfsFileId: objectId });
+          if (orderByFileId) {
+            console.error('Order found but file missing in GridFS:', {
+              orderId: orderByFileId._id,
+              orderNumber: orderByFileId.orderNumber,
+              gridfsFileId: orderByFileId.gridfsFileId
+            });
+          }
+          return res.status(404).json({ 
+            message: 'File not found in GridFS',
+            fileId: objectId.toString()
+          });
         }
 
         const file = files[0];
         
+        console.log('GridFS file found:', {
+          fileId: file._id.toString(),
+          filename: file.filename,
+          size: file.length,
+          uploadDate: file.uploadDate,
+          metadata: file.metadata
+        });
+        
         // Verify admin access if it's an order file
         const order = await Order.findOne({ gridfsFileId: file._id });
         if (order) {
+          console.log('Order found for GridFS file:', {
+            orderId: order._id,
+            orderNumber: order.orderNumber,
+            shop: order.shop,
+            userRole: req.user.role
+          });
+          
           if (order.shop === 'IT' && req.user.role !== 'it_admin') {
             return res.status(403).json({ message: 'Access denied: IT admin required' });
           }
           if (order.shop === 'SSC' && req.user.role !== 'ssc_admin') {
             return res.status(403).json({ message: 'Access denied: SSC admin required' });
           }
+        } else {
+          console.warn('No order found for GridFS file, allowing admin access');
         }
 
         // Determine content type
@@ -956,13 +998,37 @@ router.get('/file/*', protect, async (req, res) => {
       
       // Try to find the file in GridFS as fallback
       const fileName = pathParts[pathParts.length - 1];
-      const order = await Order.findOne({ 
+      
+      console.log('Trying to find order by filePath:', {
+        fileName,
+        filePath,
+        searchPatterns: [
+          `/uploads/files/${fileName}`,
+          `uploads/files/${fileName}`,
+          filePath,
+          `/${filePath}`
+        ]
+      });
+      
+      // First, try to find by filePath (multiple formats)
+      let order = await Order.findOne({ 
         $or: [
           { filePath: `/uploads/files/${fileName}` },
           { filePath: `uploads/files/${fileName}` },
-          { filePath: filePath }
+          { filePath: filePath },
+          { filePath: `/${filePath}` },
+          // Also check if filePath contains gridfs
+          { filePath: { $regex: `gridfs.*${fileName}` } }
         ]
       });
+      
+      // If not found by filePath, try to find by fileName and check if it has gridfsFileId
+      if (!order) {
+        console.log('Order not found by filePath, trying to find by fileName:', fileName);
+        order = await Order.findOne({ 
+          fileName: fileName 
+        }).sort({ createdAt: -1 }); // Get the most recent order with this fileName
+      }
       
       if (order && order.gridfsFileId) {
         console.log('Found order with GridFS file ID, serving from GridFS:', order.gridfsFileId);

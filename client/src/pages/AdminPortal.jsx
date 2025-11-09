@@ -83,6 +83,61 @@ export default function AdminPortal({ shop }) {
     }
   };
 
+  // Handle file download
+  const handleDownloadFile = async (filePath, fileName) => {
+    try {
+      if (!filePath) {
+        toast.error('File path not found');
+        return;
+      }
+
+      // Get the token for authentication
+      const token = localStorage.getItem('token');
+      
+      // Construct the full URL
+      // In production, use relative path; in development, use full URL
+      const API_URL = import.meta.env.VITE_API_URL || 
+        (import.meta.env.PROD ? '' : 'http://localhost:5000');
+      const fileUrl = `${API_URL}${filePath}`;
+      
+      // Fetch the file with authentication
+      const response = await fetch(fileUrl, {
+        method: 'GET',
+        headers: {
+          'Authorization': `Bearer ${token}`,
+        },
+      });
+
+      if (!response.ok) {
+        throw new Error('Failed to download file');
+      }
+
+      // Get the file as a blob
+      const blob = await response.blob();
+      
+      // Create a temporary URL for the blob
+      const blobUrl = window.URL.createObjectURL(blob);
+      
+      // Create a temporary anchor element to trigger download
+      const link = document.createElement('a');
+      link.href = blobUrl;
+      link.download = fileName || 'file';
+      document.body.appendChild(link);
+      
+      // Trigger the download
+      link.click();
+      
+      // Clean up
+      document.body.removeChild(link);
+      window.URL.revokeObjectURL(blobUrl);
+      
+      toast.success('File downloaded successfully');
+    } catch (error) {
+      console.error('Error downloading file:', error);
+      toast.error('Failed to download file. Please try again.');
+    }
+  };
+
   // Socket.IO setup for real-time updates
   useEffect(() => {
     if (!user) return;
@@ -677,15 +732,13 @@ export default function AdminPortal({ shop }) {
                               </td>
                               <td className="px-6 py-4">
                                 <div className="text-sm text-white">{order.fileName}</div>
-                                <a
-                                  href={order.filePath}
-                                  target="_blank"
-                                  rel="noopener noreferrer"
-                                  className="inline-flex items-center space-x-2 text-blue-300 hover:text-blue-200 text-sm font-medium mt-2 px-3 py-1.5 rounded-lg bg-blue-600/30 hover:bg-blue-600/50 backdrop-blur-sm border border-blue-400/30 transition-all"
+                                <button
+                                  onClick={() => handleDownloadFile(order.filePath, order.fileName)}
+                                  className="inline-flex items-center space-x-2 text-blue-300 hover:text-blue-200 text-sm font-medium mt-2 px-3 py-1.5 rounded-lg bg-blue-600/30 hover:bg-blue-600/50 backdrop-blur-sm border border-blue-400/30 transition-all cursor-pointer"
                                 >
                                   <Download className="w-4 h-4" />
                                   <span>Download</span>
-                                </a>
+                                </button>
                               </td>
                               <td className="px-6 py-4">
                                 <div className="text-sm text-white">

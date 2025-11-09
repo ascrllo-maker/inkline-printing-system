@@ -20,6 +20,7 @@ export default function AdminPortal({ shop }) {
   const [showCreatePrinter, setShowCreatePrinter] = useState(false);
   const [editingPrinter, setEditingPrinter] = useState(null);
   const [loading, setLoading] = useState(false);
+  const [tabLoading, setTabLoading] = useState(false);
 
   const [printerForm, setPrinterForm] = useState({
     name: '',
@@ -43,8 +44,30 @@ export default function AdminPortal({ shop }) {
     activeTabRef.current = activeTab;
   }, [activeTab]);
 
+  // Handle tab changes with clean state transitions
   useEffect(() => {
-    loadData();
+    // Clear data immediately when tab changes to prevent showing stale data
+    if (activeTab === 'ORDERS' || activeTab === 'COMPLETED' || activeTab === 'CANCELLED') {
+      setOrders([]);
+    } else if (activeTab === 'PRINTERS') {
+      setPrinters([]);
+    } else if (activeTab === 'STUDENT USERS') {
+      setUsers([]);
+    } else if (activeTab === 'APPROVE ACCOUNTS') {
+      setPendingAccounts([]);
+    } else if (activeTab === 'USER VIOLATIONS') {
+      setViolations([]);
+    }
+    
+    // Set loading state
+    setTabLoading(true);
+    
+    // Load data
+    loadData().finally(() => {
+      // Clear loading state after data loads
+      setTabLoading(false);
+    });
+    
     loadNotifications();
   }, [activeTab, shop]);
 
@@ -626,16 +649,24 @@ export default function AdminPortal({ shop }) {
         }
       } else if (currentTab === 'PRINTERS') {
         const res = await printerAPI.getPrinters(shop);
-        setPrinters(res.data);
+        if (activeTabRef.current === 'PRINTERS') {
+          setPrinters(res.data);
+        }
       } else if (currentTab === 'STUDENT USERS') {
         const res = await adminAPI.getUsers(shop);
-        setUsers(res.data);
+        if (activeTabRef.current === 'STUDENT USERS') {
+          setUsers(res.data);
+        }
       } else if (currentTab === 'APPROVE ACCOUNTS' && isITAdmin) {
         const res = await adminAPI.getPendingAccounts();
-        setPendingAccounts(res.data);
+        if (activeTabRef.current === 'APPROVE ACCOUNTS') {
+          setPendingAccounts(res.data);
+        }
       } else if (currentTab === 'USER VIOLATIONS') {
         const res = await adminAPI.getViolations(shop);
-        setViolations(res.data);
+        if (activeTabRef.current === 'USER VIOLATIONS') {
+          setViolations(res.data);
+        }
       }
     } catch (error) {
       console.error('Error loading data:', error);
@@ -1126,7 +1157,7 @@ export default function AdminPortal({ shop }) {
           )}
 
           {/* COMPLETED Tab */}
-          {activeTab === 'COMPLETED' && (
+          {activeTab === 'COMPLETED' && !tabLoading && (
             <div>
               <h2 className="text-2xl font-bold mb-4 text-white drop-shadow-md">Completed Orders</h2>
               {orders.length === 0 ? (
@@ -1167,7 +1198,7 @@ export default function AdminPortal({ shop }) {
           )}
 
           {/* CANCELLED Tab */}
-          {activeTab === 'CANCELLED' && (
+          {activeTab === 'CANCELLED' && !tabLoading && (
             <div>
               <h2 className="text-2xl font-bold mb-4 text-white drop-shadow-md">Cancelled Orders</h2>
               {orders.length === 0 ? (

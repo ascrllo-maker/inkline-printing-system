@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useRef } from 'react';
 import { useAuth } from '../context/AuthContext';
 import { adminAPI, printerAPI, notificationAPI } from '../services/api';
 import { connectSocket, disconnectSocket, joinAdminRoom, leaveAdminRoom, getSocket } from '../services/socket';
@@ -8,6 +8,7 @@ import toast from 'react-hot-toast';
 export default function AdminPortal({ shop }) {
   const { user, logout } = useAuth();
   const [activeTab, setActiveTab] = useState('ORDERS');
+  const activeTabRef = useRef('ORDERS'); // Ref to track current tab without closure issues
   const [selectedPrinterTab, setSelectedPrinterTab] = useState(null);
   const [orders, setOrders] = useState([]);
   const [printers, setPrinters] = useState([]);
@@ -36,6 +37,11 @@ export default function AdminPortal({ shop }) {
     { id: 'STUDENT USERS', label: 'STUDENT USERS', icon: Users },
     { id: 'PRINTERS', label: 'PRINTERS', icon: Printer },
   ];
+
+  // Update ref whenever activeTab changes
+  useEffect(() => {
+    activeTabRef.current = activeTab;
+  }, [activeTab]);
 
   useEffect(() => {
     loadData();
@@ -150,12 +156,15 @@ export default function AdminPortal({ shop }) {
       // Listen for new orders
       socket.on('new_order', (order) => {
         if (order && order.shop === shop) {
-          // Only show toast if on ORDERS tab
-          if (activeTab === 'ORDERS') {
+          // Use ref to get current tab (avoids closure issues)
+          const currentTab = activeTabRef.current;
+          
+          // Only show toast and reload if on ORDERS tab
+          if (currentTab === 'ORDERS') {
             toast.success('New order received!');
+            // Reload data to get the order with proper queue positions
+            loadData();
           }
-          // Reload data to get the order with proper queue positions
-          loadData();
           // Reload notifications to show new order notification
           loadNotifications();
         }
@@ -164,17 +173,64 @@ export default function AdminPortal({ shop }) {
     // Listen for order updates
     socket.on('order_updated', (order) => {
       if (order && order.shop === shop) {
-        setOrders(prev => prev.map(o => o._id === order._id ? order : o));
-        // Reload data to ensure queue positions and printer counts are updated
-        loadData();
+        // Use ref to get current tab (avoids closure issues)
+        const currentTab = activeTabRef.current;
+        
+        // Update the order in the current orders list if it exists
+        setOrders(prev => {
+          const exists = prev.find(o => o._id === order._id);
+          if (exists) {
+            // Only update if the order's status matches the current tab filter
+            if (currentTab === 'ORDERS' && ['In Queue', 'Printing', 'Ready for Pickup', 'Ready for Pickup & Payment'].includes(order.status)) {
+              return prev.map(o => o._id === order._id ? order : o);
+            } else if (currentTab === 'COMPLETED' && order.status === 'Completed') {
+              return prev.map(o => o._id === order._id ? order : o);
+            } else if (currentTab === 'CANCELLED' && order.status === 'Cancelled') {
+              return prev.map(o => o._id === order._id ? order : o);
+            } else {
+              // Order status changed and no longer matches current tab, remove it
+              return prev.filter(o => o._id !== order._id);
+            }
+          }
+          return prev;
+        });
+        
+        // Only reload data if we're on a tab that shows orders and needs queue updates
+        // Don't reload for COMPLETED or CANCELLED tabs to avoid race conditions
+        if (currentTab === 'ORDERS' || currentTab === 'PRINTERS') {
+          loadData();
+        }
       }
     });
 
     socket.on('order_cancelled', (order) => {
       if (order && order.shop === shop) {
-        setOrders(prev => prev.map(o => o._id === order._id ? order : o));
-        // Reload data to ensure queue positions and printer counts are updated
-        loadData();
+        // Use ref to get current tab (avoids closure issues)
+        const currentTab = activeTabRef.current;
+        
+        // If we're on the CANCELLED tab, add/update the cancelled order
+        if (currentTab === 'CANCELLED') {
+          setOrders(prev => {
+            const exists = prev.find(o => o._id === order._id);
+            if (!exists) {
+              // Only add if it's actually cancelled
+              if (order.status === 'Cancelled') {
+                return [order, ...prev];
+              }
+            } else {
+              // Update existing order
+              return prev.map(o => o._id === order._id ? order : o);
+            }
+            return prev;
+          });
+        } else {
+          // If we're on ORDERS tab, remove the cancelled order
+          setOrders(prev => prev.filter(o => o._id !== order._id));
+          // Reload data to update queue positions and printer counts
+          if (currentTab === 'ORDERS' || currentTab === 'PRINTERS') {
+            loadData();
+          }
+        }
         // Reload notifications to show cancelled order notification
         loadNotifications();
       }
@@ -279,29 +335,50 @@ export default function AdminPortal({ shop }) {
 
   const loadData = async () => {
     try {
-      if (activeTab === 'ORDERS') {
+      // Use ref to get current tab (avoids closure issues)
+      const currentTab = activeTabRef.current;
+      
+      if (currentTab === 'ORDERS') {
         const res = await adminAPI.getOrders(shop);
-        setOrders(res.data.filter(o => ['In Queue', 'Printing', 'Ready for Pickup', 'Ready for Pickup & Payment'].includes(o.status)));
-      } else if (activeTab === 'COMPLETED') {
+        // Double-check we're still on the ORDERS tab before updating state
+        if (activeTabRef.current === 'ORDERS') {
+          const filteredOrders = res.data.filter(o => ['In Queue', 'Printing', 'Ready for Pickup', 'Ready for Pickup & Payment'].includes(o.status));
+          setOrders(filteredOrders);
+        }
+      } else if (currentTab === 'COMPLETED') {
         const res = await adminAPI.getOrders(shop);
-        setOrders(res.data.filter(o => o.status === 'Completed'));
-      } else if (activeTab === 'CANCELLED') {
+        // Double-check we're still on the COMPLETED tab before updating state
+        if (activeTabRef.current === 'COMPLETED') {
+          const filteredOrders = res.data.filter(o => o.status === 'Completed');
+          setOrders(filteredOrders);
+        }
+      } else if (currentTab === 'CANCELLED') {
         const res = await adminAPI.getOrders(shop);
-        setOrders(res.data.filter(o => o.status === 'Cancelled'));
-      } else if (activeTab === 'PRINTERS') {
+        // Double-check we're still on the CANCELLED tab before updating state
+        // Filter for cancelled orders only - be very explicit
+        if (activeTabRef.current === 'CANCELLED') {
+          const cancelledOrders = res.data.filter(o => {
+            // Explicitly check status is exactly 'Cancelled'
+            return o.status === 'Cancelled';
+          });
+          console.log('Loading cancelled orders:', cancelledOrders.length, 'out of', res.data.length, 'total orders');
+          setOrders(cancelledOrders);
+        }
+      } else if (currentTab === 'PRINTERS') {
         const res = await printerAPI.getPrinters(shop);
         setPrinters(res.data);
-      } else if (activeTab === 'STUDENT USERS') {
+      } else if (currentTab === 'STUDENT USERS') {
         const res = await adminAPI.getUsers(shop);
         setUsers(res.data);
-      } else if (activeTab === 'APPROVE ACCOUNTS' && isITAdmin) {
+      } else if (currentTab === 'APPROVE ACCOUNTS' && isITAdmin) {
         const res = await adminAPI.getPendingAccounts();
         setPendingAccounts(res.data);
-      } else if (activeTab === 'USER VIOLATIONS') {
+      } else if (currentTab === 'USER VIOLATIONS') {
         const res = await adminAPI.getViolations(shop);
         setViolations(res.data);
       }
     } catch (error) {
+      console.error('Error loading data:', error);
       toast.error('Failed to load data');
     }
   };

@@ -204,7 +204,8 @@ router.put('/update-order-status/:id', protect, async (req, res) => {
       
       if (updatedPrinter) {
         const io = req.app.get('io');
-        io.emit('printer_updated', updatedPrinter);
+        const printerData = updatedPrinter.toObject ? updatedPrinter.toObject() : updatedPrinter;
+        io.emit('printer_updated', printerData);
       }
     }
 
@@ -322,10 +323,11 @@ router.post('/printers', protect, async (req, res) => {
       availablePaperSizes: formattedPaperSizes
     });
 
-    // Emit socket event
+    // Emit socket event (convert to plain object)
     const io = req.app.get('io');
     if (io) {
-      io.emit('printer_created', printer);
+      const printerData = printer.toObject ? printer.toObject() : printer;
+      io.emit('printer_created', printerData);
     }
 
     res.status(201).json({ message: 'Printer created successfully', printer });

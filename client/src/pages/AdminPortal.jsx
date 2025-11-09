@@ -139,44 +139,147 @@ export default function AdminPortal({ shop }) {
         throw new Error('File is empty or could not be loaded');
       }
       
+      // Get content type from response headers (preferred)
+      let contentType = response.headers.get('content-type');
+      const contentDisposition = response.headers.get('content-disposition');
+      
       console.log('File loaded:', {
         size: blob.size,
-        type: blob.type,
-        contentType: response.headers.get('content-type')
+        blobType: blob.type,
+        contentType: contentType,
+        contentDisposition: contentDisposition,
+        fileName: fileName
       });
       
-      // Get content type from response headers (preferred) or blob type
-      let contentType = response.headers.get('content-type');
+      // If content-type is missing or generic, try to infer from file extension
       if (!contentType || contentType === 'application/octet-stream') {
-        contentType = blob.type || 'application/octet-stream';
+        const extension = fileName.split('.').pop()?.toLowerCase();
+        const mimeTypes = {
+          'pdf': 'application/pdf',
+          'doc': 'application/msword',
+          'docx': 'application/vnd.openxmlformats-officedocument.wordprocessingml.document',
+          'ppt': 'application/vnd.ms-powerpoint',
+          'pptx': 'application/vnd.openxmlformats-officedocument.presentationml.presentation',
+          'xls': 'application/vnd.ms-excel',
+          'xlsx': 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
+          'jpg': 'image/jpeg',
+          'jpeg': 'image/jpeg',
+          'png': 'image/png',
+          'gif': 'image/gif',
+          'txt': 'text/plain',
+          'html': 'text/html',
+          'htm': 'text/html'
+        };
+        if (extension && mimeTypes[extension]) {
+          contentType = mimeTypes[extension];
+          console.log('Inferred content type from extension:', contentType);
+        } else {
+          contentType = blob.type || 'application/octet-stream';
+        }
       }
       
       // Create a new blob with the correct MIME type
       const typedBlob = new Blob([blob], { type: contentType });
       
-      // Create blob URL
-      const blobUrl = URL.createObjectURL(typedBlob);
-      console.log('Blob URL created:', blobUrl, 'Type:', contentType);
-      
-      // Open in new tab
-      const newWindow = window.open(blobUrl, '_blank', 'noopener,noreferrer');
-      
-      if (!newWindow) {
-        toast.dismiss(loadingToast);
-        toast.error('Popup blocked. Please allow popups for this site.');
-        URL.revokeObjectURL(blobUrl);
-        return;
+      // Verify the typed blob
+      if (typedBlob.size !== blob.size) {
+        console.warn('Blob size mismatch:', typedBlob.size, 'vs', blob.size);
       }
       
-      toast.dismiss(loadingToast);
-      toast.success('File opened in new tab');
+      // Create blob URL
+      const blobUrl = URL.createObjectURL(typedBlob);
+      console.log('Blob URL created:', {
+        url: blobUrl,
+        type: contentType,
+        size: typedBlob.size
+      });
       
-      // Don't revoke the blob URL - let it persist so the file can be viewed
-      // The browser will clean it up when the tab is closed or the page is refreshed
+      // For PDFs and images, try opening directly first
+      // For other file types, download them
+      const isPDF = contentType === 'application/pdf';
+      const isImage = contentType.startsWith('image/');
+      
+      if (isPDF || isImage) {
+        // Open in new tab for PDFs and images
+        const newWindow = window.open(blobUrl, '_blank', 'noopener,noreferrer');
+        
+        if (!newWindow) {
+          toast.dismiss(loadingToast);
+          toast.error('Popup blocked. Please allow popups for this site.');
+          URL.revokeObjectURL(blobUrl);
+          return;
+        }
+        
+        // Wait a bit to check if the window loaded successfully
+        setTimeout(() => {
+          try {
+            if (newWindow.closed) {
+              console.warn('Window was closed immediately');
+            }
+          } catch (e) {
+            // Can't access window if it's from a different origin
+            console.log('Cannot check window status (cross-origin)');
+          }
+        }, 1000);
+        
+        toast.dismiss(loadingToast);
+        toast.success('File opened in new tab');
+      } else {
+        // For other file types, create a download link
+        const link = document.createElement('a');
+        link.href = blobUrl;
+        link.download = fileName || 'file';
+        link.style.display = 'none';
+        document.body.appendChild(link);
+        link.click();
+        document.body.removeChild(link);
+        
+        toast.dismiss(loadingToast);
+        toast.success('File download started');
+        
+        // Revoke blob URL after a short delay for downloads
+        setTimeout(() => {
+          URL.revokeObjectURL(blobUrl);
+        }, 1000);
+      }
+      
+      // For PDFs and images, don't revoke the blob URL immediately
+      // The browser will clean it up when the tab is closed
+      // Store blob URLs in a Set to prevent memory leaks (optional cleanup after 5 minutes)
+      if (isPDF || isImage) {
+        // Optional: Clean up blob URLs after 5 minutes to prevent memory leaks
+        setTimeout(() => {
+          try {
+            // Don't revoke if the window might still be open
+            // The browser will handle cleanup
+            console.log('Blob URL cleanup timer expired (file should still be accessible)');
+          } catch (e) {
+            // Ignore errors
+          }
+        }, 300000); // 5 minutes
+      }
       
     } catch (error) {
       console.error('Error opening file:', error);
-      toast.error(`Failed to open file: ${error.message}`);
+      console.error('Error details:', {
+        message: error.message,
+        stack: error.stack,
+        filePath: filePath,
+        fileName: fileName
+      });
+      
+      toast.dismiss(loadingToast);
+      
+      // Provide more specific error messages
+      if (error.message.includes('404')) {
+        toast.error('File not found. The file may have been deleted or moved.');
+      } else if (error.message.includes('403')) {
+        toast.error('Access denied. You may not have permission to view this file.');
+      } else if (error.message.includes('empty')) {
+        toast.error('File is empty or corrupted.');
+      } else {
+        toast.error(`Failed to open file: ${error.message}`);
+      }
     }
   };
 

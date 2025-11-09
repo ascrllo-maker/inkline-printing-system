@@ -825,6 +825,8 @@ router.get('/file/*', protect, async (req, res) => {
     // Get the file path from the request
     const filePath = req.params[0]; // Get everything after /api/admin/file/
     
+    console.log('File request received:', filePath);
+    
     if (!filePath) {
       return res.status(400).json({ message: 'File path is required' });
     }
@@ -832,64 +834,146 @@ router.get('/file/*', protect, async (req, res) => {
     // Extract shop from file path to verify admin access
     // File paths are like: uploads/files/filename or uploads/ids/filename (no leading slash)
     const pathParts = filePath.split('/').filter(p => p); // Remove empty parts
+    console.log('Path parts:', pathParts);
+    
     if (pathParts.length < 2 || pathParts[0] !== 'uploads') {
-      return res.status(400).json({ message: 'Invalid file path format' });
+      console.error('Invalid file path format:', filePath);
+      return res.status(400).json({ message: 'Invalid file path format. Expected: uploads/files/filename' });
     }
 
     // Construct the full file path
     const uploadsDir = path.join(__dirname, '../../uploads');
     // pathParts is like: ['uploads', 'files', 'filename']
-    // We want: uploads/files/filename
-    const relativePath = pathParts.join(path.sep);
-    const fullPath = path.resolve(uploadsDir, pathParts.slice(1).join(path.sep));
+    // We want: files/filename (skip 'uploads' since uploadsDir already includes it)
+    const relativePath = pathParts.slice(1).join(path.sep); // Remove 'uploads' from path
+    const fullPath = path.join(uploadsDir, relativePath);
+    
+    console.log('Uploads directory:', uploadsDir);
+    console.log('Relative path:', relativePath);
+    console.log('Full path:', fullPath);
 
-    // Security: Prevent directory traversal
-    if (!fullPath.startsWith(uploadsDir)) {
-      return res.status(403).json({ message: 'Access denied' });
+    // Security: Prevent directory traversal - normalize the path first
+    const normalizedPath = path.normalize(fullPath);
+    const normalizedUploadsDir = path.normalize(uploadsDir);
+    
+    if (!normalizedPath.startsWith(normalizedUploadsDir)) {
+      console.error('Directory traversal attempt detected:', normalizedPath);
+      return res.status(403).json({ message: 'Access denied: Invalid path' });
     }
 
     // Check if file exists
-    if (!fs.existsSync(fullPath)) {
-      return res.status(404).json({ message: 'File not found' });
+    if (!fs.existsSync(normalizedPath)) {
+      console.error('File not found:', normalizedPath);
+      console.error('Uploads directory exists:', fs.existsSync(uploadsDir));
+      if (fs.existsSync(uploadsDir)) {
+        // List files in the directory for debugging
+        const filesDir = path.join(uploadsDir, 'files');
+        if (fs.existsSync(filesDir)) {
+          const files = fs.readdirSync(filesDir);
+          console.error('Files in uploads/files directory:', files.slice(0, 10)); // Show first 10 files
+        }
+      }
+      return res.status(404).json({ 
+        message: 'File not found',
+        requestedPath: filePath,
+        fullPath: normalizedPath
+      });
     }
 
     // If it's an order file, verify the admin has access to this shop
     if (pathParts[1] === 'files') {
       // Find the order that contains this file
       const fileName = pathParts[pathParts.length - 1];
-      const order = await Order.findOne({ filePath: `/uploads/files/${fileName}` });
+      // Try to find order with different path formats
+      const order = await Order.findOne({ 
+        $or: [
+          { filePath: `/uploads/files/${fileName}` },
+          { filePath: `uploads/files/${fileName}` },
+          { filePath: `/uploads/files/${fileName}` }
+        ]
+      });
       
       if (order) {
         // Check admin permission for this shop
         if (order.shop === 'IT' && req.user.role !== 'it_admin') {
-          return res.status(403).json({ message: 'Access denied' });
+          return res.status(403).json({ message: 'Access denied: IT admin required' });
         }
         if (order.shop === 'SSC' && req.user.role !== 'ssc_admin') {
-          return res.status(403).json({ message: 'Access denied' });
+          return res.status(403).json({ message: 'Access denied: SSC admin required' });
         }
+      } else {
+        console.warn('Order not found for file:', fileName, 'Allowing access for admin');
+        // Allow access even if order not found (file might be orphaned, but admin should still access it)
       }
     }
 
+    // Get file stats to verify it's a file and get its size
+    const stats = fs.statSync(normalizedPath);
+    if (!stats.isFile()) {
+      return res.status(400).json({ message: 'Path is not a file' });
+    }
+
     // Determine content type from file extension
-    const ext = path.extname(fullPath);
-    const contentType = mime.lookup(ext) || 'application/octet-stream';
+    const ext = path.extname(normalizedPath);
+    let contentType = mime.lookup(ext);
+    
+    // Fallback for common file types if mime lookup fails
+    if (!contentType) {
+      const extLower = ext.toLowerCase();
+      const mimeMap = {
+        '.pdf': 'application/pdf',
+        '.doc': 'application/msword',
+        '.docx': 'application/vnd.openxmlformats-officedocument.wordprocessingml.document',
+        '.xls': 'application/vnd.ms-excel',
+        '.xlsx': 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
+        '.ppt': 'application/vnd.ms-powerpoint',
+        '.pptx': 'application/vnd.openxmlformats-officedocument.presentationml.presentation',
+        '.jpg': 'image/jpeg',
+        '.jpeg': 'image/jpeg',
+        '.png': 'image/png',
+        '.gif': 'image/gif',
+        '.txt': 'text/plain'
+      };
+      contentType = mimeMap[extLower] || 'application/octet-stream';
+    }
+
+    console.log('Serving file:', {
+      path: normalizedPath,
+      size: stats.size,
+      contentType: contentType,
+      extension: ext
+    });
 
     // Set headers for proper file display
     res.setHeader('Content-Type', contentType);
-    res.setHeader('Content-Disposition', 'inline; filename="' + path.basename(fullPath) + '"');
+    res.setHeader('Content-Disposition', `inline; filename="${encodeURIComponent(path.basename(normalizedPath))}"`);
+    res.setHeader('Content-Length', stats.size);
     res.setHeader('Cache-Control', 'private, max-age=3600');
     res.setHeader('X-Content-Type-Options', 'nosniff');
+    res.setHeader('Accept-Ranges', 'bytes');
 
     // Stream the file
-    const fileStream = fs.createReadStream(fullPath);
-    fileStream.pipe(res);
-
+    const fileStream = fs.createReadStream(normalizedPath);
+    
     fileStream.on('error', (error) => {
       console.error('Error streaming file:', error);
       if (!res.headersSent) {
-        res.status(500).json({ message: 'Error reading file' });
+        res.status(500).json({ message: 'Error reading file', error: error.message });
+      } else {
+        // If headers were sent, we can't send JSON, so just end the response
+        res.end();
       }
     });
+    
+    fileStream.on('open', () => {
+      console.log('File stream opened successfully');
+    });
+    
+    fileStream.on('end', () => {
+      console.log('File stream ended successfully');
+    });
+
+    fileStream.pipe(res);
 
   } catch (error) {
     console.error('Error serving file:', error);

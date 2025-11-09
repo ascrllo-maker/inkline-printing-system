@@ -32,6 +32,10 @@ const orderSchema = new mongoose.Schema({
     type: String,
     required: true
   },
+  gridfsFileId: {
+    type: mongoose.Schema.Types.ObjectId,
+    required: false
+  },
   paperSize: {
     type: String,
     required: true

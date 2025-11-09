@@ -6,7 +6,15 @@ import User from '../models/User.js';
 import { protect } from '../middleware/auth.js';
 import { uploadFile } from '../middleware/upload.js';
 import { generateOrderNumber } from '../utils/helpers.js';
+import mongoose from 'mongoose';
+import { GridFSBucket } from 'mongodb';
 import { sendOrderCreatedEmail } from '../utils/email.js';
+import path from 'path';
+import fs from 'fs';
+import { fileURLToPath } from 'url';
+
+const __filename = fileURLToPath(import.meta.url);
+const __dirname = path.dirname(__filename);
 
 const router = express.Router();
 
@@ -77,6 +85,56 @@ router.post('/create', protect, uploadFile.single('file'), async (req, res) => {
       status: 'In Queue'
     });
 
+    // Store file in GridFS if MongoDB is connected
+    let gridfsFileId = null;
+    let filePath = `/uploads/files/${req.file.originalname}`;
+    
+    if (mongoose.connection.readyState === 1 && req.file.buffer) {
+      try {
+        const gridFSBucket = new GridFSBucket(mongoose.connection.db, { bucketName: 'uploads' });
+        const uniqueSuffix = Date.now() + '-' + Math.round(Math.random() * 1E9);
+        const filename = `file-${uniqueSuffix}${path.extname(req.file.originalname)}`;
+        
+        const uploadStream = gridFSBucket.openUploadStream(filename, {
+          metadata: {
+            originalName: req.file.originalname,
+            mimetype: req.file.mimetype,
+            uploadedBy: req.user._id.toString()
+          }
+        });
+        
+        uploadStream.end(req.file.buffer);
+        
+        await new Promise((resolve, reject) => {
+          uploadStream.on('finish', () => {
+            gridfsFileId = uploadStream.id;
+            filePath = `/gridfs/${gridfsFileId}`;
+            console.log('File stored in GridFS:', gridfsFileId, filename);
+            resolve();
+          });
+          uploadStream.on('error', reject);
+        });
+      } catch (gridfsError) {
+        console.error('Error storing file in GridFS, falling back to local storage:', gridfsError);
+        // Fall back to local file storage if GridFS fails
+        // File is already in memory, we need to save it to disk
+        const filesDir = path.join(__dirname, '../../uploads/files');
+        const uniqueSuffix = Date.now() + '-' + Math.round(Math.random() * 1E9);
+        const filename = `file-${uniqueSuffix}${path.extname(req.file.originalname)}`;
+        const filePath_local = path.join(filesDir, filename);
+        
+        if (!fs.existsSync(filesDir)) {
+          fs.mkdirSync(filesDir, { recursive: true });
+        }
+        
+        fs.writeFileSync(filePath_local, req.file.buffer);
+        filePath = `/uploads/files/${filename}`;
+      }
+    } else if (req.file.path) {
+      // File was saved to disk (fallback)
+      filePath = `/uploads/files/${req.file.filename}`;
+    }
+
     // Create order
     const order = await Order.create({
       orderNumber,
@@ -84,7 +142,8 @@ router.post('/create', protect, uploadFile.single('file'), async (req, res) => {
       printerId,
       shop,
       fileName: req.file.originalname,
-      filePath: `/uploads/files/${req.file.filename}`,
+      filePath: filePath,
+      gridfsFileId: gridfsFileId,
       paperSize,
       orientation,
       colorType,

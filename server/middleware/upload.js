@@ -2,11 +2,13 @@ import multer from 'multer';
 import path from 'path';
 import { fileURLToPath } from 'url';
 import fs from 'fs';
+import mongoose from 'mongoose';
+import { GridFSBucket } from 'mongodb';
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
 
-// Create uploads directories if they don't exist
+// Create uploads directories if they don't exist (for local storage fallback)
 const uploadsDir = path.join(__dirname, '../../uploads');
 const idsDir = path.join(uploadsDir, 'ids');
 const filesDir = path.join(uploadsDir, 'files');
@@ -17,27 +19,22 @@ const filesDir = path.join(uploadsDir, 'files');
   }
 });
 
-// Storage configuration for ID images
-const idStorage = multer.diskStorage({
-  destination: (req, file, cb) => {
-    cb(null, idsDir);
-  },
-  filename: (req, file, cb) => {
-    const uniqueSuffix = Date.now() + '-' + Math.round(Math.random() * 1E9);
-    cb(null, 'id-' + uniqueSuffix + path.extname(file.originalname));
+// Get GridFS bucket
+const getGridFSBucket = () => {
+  if (mongoose.connection.readyState === 1) {
+    return new GridFSBucket(mongoose.connection.db, { bucketName: 'uploads' });
   }
-});
+  return null;
+};
 
-// Storage configuration for print files
-const fileStorage = multer.diskStorage({
-  destination: (req, file, cb) => {
-    cb(null, filesDir);
-  },
-  filename: (req, file, cb) => {
-    const uniqueSuffix = Date.now() + '-' + Math.round(Math.random() * 1E9);
-    cb(null, 'file-' + uniqueSuffix + path.extname(file.originalname));
-  }
-});
+// Memory storage for GridFS (stores file in memory, then uploads to GridFS)
+const memoryStorage = multer.memoryStorage();
+
+// Storage configuration for ID images - use memory storage for GridFS
+const idStorage = memoryStorage;
+
+// Storage configuration for print files - use memory storage for GridFS
+const fileStorage = memoryStorage;
 
 // File filter for images (ID verification)
 const imageFilter = (req, file, cb) => {

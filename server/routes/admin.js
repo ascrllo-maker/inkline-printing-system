@@ -10,6 +10,8 @@ import path from 'path';
 import { fileURLToPath } from 'url';
 import fs from 'fs';
 import mime from 'mime-types';
+import mongoose from 'mongoose';
+import { GridFSBucket } from 'mongodb';
 
 const router = express.Router();
 
@@ -831,6 +833,72 @@ router.get('/file/*', protect, async (req, res) => {
       return res.status(400).json({ message: 'File path is required' });
     }
 
+    // Check if this is a GridFS file path
+    if (filePath.startsWith('gridfs/')) {
+      const fileId = filePath.replace('gridfs/', '');
+      
+      // Validate ObjectId
+      if (!mongoose.Types.ObjectId.isValid(fileId)) {
+        return res.status(400).json({ message: 'Invalid file ID' });
+      }
+
+      try {
+        const gridFSBucket = new GridFSBucket(mongoose.connection.db, { bucketName: 'uploads' });
+        
+        // Find file metadata
+        const files = await gridFSBucket.find({ _id: new mongoose.Types.ObjectId(fileId) }).toArray();
+        
+        if (files.length === 0) {
+          return res.status(404).json({ message: 'File not found in GridFS' });
+        }
+
+        const file = files[0];
+        
+        // Verify admin access if it's an order file
+        const order = await Order.findOne({ gridfsFileId: file._id });
+        if (order) {
+          if (order.shop === 'IT' && req.user.role !== 'it_admin') {
+            return res.status(403).json({ message: 'Access denied: IT admin required' });
+          }
+          if (order.shop === 'SSC' && req.user.role !== 'ssc_admin') {
+            return res.status(403).json({ message: 'Access denied: SSC admin required' });
+          }
+        }
+
+        // Determine content type
+        const ext = path.extname(file.filename);
+        let contentType = mime.lookup(ext) || file.metadata?.mimetype || 'application/octet-stream';
+
+        // Set headers
+        res.setHeader('Content-Type', contentType);
+        res.setHeader('Content-Disposition', `inline; filename="${encodeURIComponent(file.metadata?.originalName || file.filename)}"`);
+        res.setHeader('Content-Length', file.length);
+        res.setHeader('Cache-Control', 'private, max-age=3600');
+        res.setHeader('X-Content-Type-Options', 'nosniff');
+        res.setHeader('Accept-Ranges', 'bytes');
+
+        // Stream file from GridFS
+        const downloadStream = gridFSBucket.openDownloadStream(file._id);
+        
+        downloadStream.on('error', (error) => {
+          console.error('Error streaming file from GridFS:', error);
+          if (!res.headersSent) {
+            res.status(500).json({ message: 'Error reading file', error: error.message });
+          } else {
+            res.end();
+          }
+        });
+
+        downloadStream.pipe(res);
+        return;
+
+      } catch (gridfsError) {
+        console.error('Error retrieving file from GridFS:', gridfsError);
+        return res.status(500).json({ message: 'Error retrieving file from GridFS', error: gridfsError.message });
+      }
+    }
+
+    // Handle legacy file system paths
     // Extract shop from file path to verify admin access
     // File paths are like: uploads/files/filename or uploads/ids/filename (no leading slash)
     const pathParts = filePath.split('/').filter(p => p); // Remove empty parts
@@ -838,7 +906,7 @@ router.get('/file/*', protect, async (req, res) => {
     
     if (pathParts.length < 2 || pathParts[0] !== 'uploads') {
       console.error('Invalid file path format:', filePath);
-      return res.status(400).json({ message: 'Invalid file path format. Expected: uploads/files/filename' });
+      return res.status(400).json({ message: 'Invalid file path format. Expected: uploads/files/filename or gridfs/fileId' });
     }
 
     // Construct the full file path
@@ -863,8 +931,67 @@ router.get('/file/*', protect, async (req, res) => {
 
     // Check if file exists
     if (!fs.existsSync(normalizedPath)) {
-      console.error('File not found:', normalizedPath);
+      console.error('File not found on filesystem:', normalizedPath);
       console.error('Uploads directory exists:', fs.existsSync(uploadsDir));
+      
+      // Try to find the file in GridFS as fallback
+      const fileName = pathParts[pathParts.length - 1];
+      const order = await Order.findOne({ 
+        $or: [
+          { filePath: `/uploads/files/${fileName}` },
+          { filePath: `uploads/files/${fileName}` },
+          { filePath: filePath }
+        ]
+      });
+      
+      if (order && order.gridfsFileId) {
+        console.log('Found order with GridFS file ID, serving from GridFS:', order.gridfsFileId);
+        
+        try {
+          const gridFSBucket = new GridFSBucket(mongoose.connection.db, { bucketName: 'uploads' });
+          
+          // Find file metadata
+          const gridfsFiles = await gridFSBucket.find({ _id: order.gridfsFileId }).toArray();
+          
+          if (gridfsFiles.length === 0) {
+            console.error('File not found in GridFS:', order.gridfsFileId);
+            return res.status(404).json({ message: 'File not found in GridFS' });
+          }
+
+          const gridfsFile = gridfsFiles[0];
+          
+          // Determine content type
+          const ext = path.extname(gridfsFile.filename);
+          let contentType = mime.lookup(ext) || gridfsFile.metadata?.mimetype || 'application/octet-stream';
+
+          // Set headers
+          res.setHeader('Content-Type', contentType);
+          res.setHeader('Content-Disposition', `inline; filename="${encodeURIComponent(gridfsFile.metadata?.originalName || gridfsFile.filename)}"`);
+          res.setHeader('Content-Length', gridfsFile.length);
+          res.setHeader('Cache-Control', 'private, max-age=3600');
+          res.setHeader('X-Content-Type-Options', 'nosniff');
+          res.setHeader('Accept-Ranges', 'bytes');
+
+          // Stream file from GridFS
+          const downloadStream = gridFSBucket.openDownloadStream(order.gridfsFileId);
+          
+          downloadStream.on('error', (error) => {
+            console.error('Error streaming file from GridFS:', error);
+            if (!res.headersSent) {
+              res.status(500).json({ message: 'Error reading file', error: error.message });
+            } else {
+              res.end();
+            }
+          });
+
+          downloadStream.pipe(res);
+          return;
+        } catch (gridfsError) {
+          console.error('Error retrieving file from GridFS:', gridfsError);
+          return res.status(500).json({ message: 'Error retrieving file from GridFS', error: gridfsError.message });
+        }
+      }
+      
       if (fs.existsSync(uploadsDir)) {
         // List files in the directory for debugging
         const filesDir = path.join(uploadsDir, 'files');
@@ -876,7 +1003,8 @@ router.get('/file/*', protect, async (req, res) => {
       return res.status(404).json({ 
         message: 'File not found',
         requestedPath: filePath,
-        fullPath: normalizedPath
+        fullPath: normalizedPath,
+        note: 'File may have been lost due to server restart (Render uses ephemeral filesystem)'
       });
     }
 

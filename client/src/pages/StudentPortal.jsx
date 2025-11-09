@@ -64,67 +64,171 @@ export default function StudentPortal() {
 
     // Listen for printer updates
     socket.on('printer_updated', (printer) => {
-      // Validate printer data structure
-      if (!printer || !printer._id || !printer.shop) {
-        console.warn('Invalid printer data received:', printer);
-        return;
-      }
+      try {
+        // Validate printer data structure
+        if (!printer || !printer._id || !printer.shop) {
+          console.warn('Invalid printer data received:', printer);
+          return;
+        }
 
-      if (printer.shop === selectedShop) {
-        setPrinters(prev => {
-          const exists = prev.find(p => p._id === printer._id);
-          if (exists) {
-            // Update existing printer
-            return prev.map(p => p._id === printer._id ? printer : p);
-          } else {
-            // Add printer if it doesn't exist (race condition fix)
-            console.log('Adding new printer from socket update:', printer.name);
-            return [...prev, printer];
-          }
-        });
-        
-        // Update selected printer if it's the one being updated
-        setSelectedPrinter(prev => {
-          if (prev && prev._id === printer._id) {
-            // If the current paper size is no longer available, reset to first available
-            const availableSizes = (printer.availablePaperSizes || []).filter(ps => ps && ps.enabled);
-            if (availableSizes.length > 0) {
-              setOrderForm(currentForm => {
-                const currentSize = currentForm.paperSize;
-                const isCurrentSizeAvailable = availableSizes.some(ps => ps.size === currentSize);
-                if (!isCurrentSizeAvailable) {
-                  toast.info(`Paper size ${currentSize} is no longer available. Changed to ${availableSizes[0].size}`);
-                  return {
-                    ...currentForm,
-                    paperSize: availableSizes[0].size
-                  };
-                }
-                return currentForm;
-              });
+        // Normalize printer data (same as API response)
+        const normalizePrinter = (p) => {
+          try {
+            let plainPrinter;
+            try {
+              plainPrinter = p.toObject ? p.toObject() : { ...p };
+            } catch {
+              plainPrinter = {
+                _id: p._id,
+                name: p.name,
+                shop: p.shop,
+                status: p.status,
+                availablePaperSizes: p.availablePaperSizes,
+                queueCount: p.queueCount || 0,
+                createdAt: p.createdAt
+              };
             }
-            return printer;
+            
+            // Normalize paper sizes
+            if (!plainPrinter.availablePaperSizes || !Array.isArray(plainPrinter.availablePaperSizes)) {
+              plainPrinter.availablePaperSizes = [];
+            } else {
+              plainPrinter.availablePaperSizes = plainPrinter.availablePaperSizes.map(ps => ({
+                size: String(ps?.size || '').trim(),
+                enabled: ps?.enabled !== false
+              })).filter(ps => ps.size.length > 0);
+            }
+            
+            plainPrinter.queueCount = plainPrinter.queueCount || 0;
+            return plainPrinter;
+          } catch (error) {
+            console.error('Error normalizing printer from socket:', error);
+            return p;
           }
-          return prev;
-        });
+        };
+
+        const normalizedPrinter = normalizePrinter(printer);
+
+        if (normalizedPrinter.shop === selectedShop) {
+          setPrinters(prev => {
+            const exists = prev.find(p => {
+              const pId = String(p._id || '');
+              const nId = String(normalizedPrinter._id || '');
+              return pId === nId;
+            });
+            if (exists) {
+              // Update existing printer
+              return prev.map(p => {
+                const pId = String(p._id || '');
+                const nId = String(normalizedPrinter._id || '');
+                return pId === nId ? normalizedPrinter : p;
+              });
+            } else {
+              // Add printer if it doesn't exist (race condition fix)
+              console.log('Adding new printer from socket update:', normalizedPrinter.name);
+              return [...prev, normalizedPrinter];
+            }
+          });
+          
+          // Update selected printer if it's the one being updated
+          setSelectedPrinter(prev => {
+            if (prev) {
+              const prevId = String(prev._id || '');
+              const newId = String(normalizedPrinter._id || '');
+              if (prevId === newId) {
+                // If the current paper size is no longer available, reset to first available
+                const availableSizes = normalizedPrinter.availablePaperSizes.filter(ps => ps && ps.enabled);
+                if (availableSizes.length > 0) {
+                  setOrderForm(currentForm => {
+                    const currentSize = currentForm.paperSize;
+                    const isCurrentSizeAvailable = availableSizes.some(ps => {
+                      const psSize = String(ps.size || '').trim().toLowerCase();
+                      const currSize = String(currentSize || '').trim().toLowerCase();
+                      return psSize === currSize;
+                    });
+                    if (!isCurrentSizeAvailable) {
+                      toast.info(`Paper size ${currentSize} is no longer available. Changed to ${availableSizes[0].size}`);
+                      return {
+                        ...currentForm,
+                        paperSize: availableSizes[0].size
+                      };
+                    }
+                    return currentForm;
+                  });
+                }
+                return normalizedPrinter;
+              }
+            }
+            return prev;
+          });
+        }
+      } catch (error) {
+        console.error('Error handling printer_updated socket event:', error);
       }
     });
 
     socket.on('printer_created', (printer) => {
-      // Validate printer data structure
-      if (!printer || !printer._id || !printer.shop) {
-        console.warn('Invalid printer data received:', printer);
-        return;
-      }
+      try {
+        // Validate printer data structure
+        if (!printer || !printer._id || !printer.shop) {
+          console.warn('Invalid printer data received:', printer);
+          return;
+        }
 
-      if (printer.shop === selectedShop) {
-        setPrinters(prev => {
-          const exists = prev.find(p => p._id === printer._id);
-          if (!exists) {
-            console.log('Adding new printer from socket:', printer.name);
-            return [...prev, printer];
+        // Normalize printer data (same as API response)
+        const normalizePrinter = (p) => {
+          try {
+            let plainPrinter;
+            try {
+              plainPrinter = p.toObject ? p.toObject() : { ...p };
+            } catch {
+              plainPrinter = {
+                _id: p._id,
+                name: p.name,
+                shop: p.shop,
+                status: p.status,
+                availablePaperSizes: p.availablePaperSizes,
+                queueCount: p.queueCount || 0,
+                createdAt: p.createdAt
+              };
+            }
+            
+            // Normalize paper sizes
+            if (!plainPrinter.availablePaperSizes || !Array.isArray(plainPrinter.availablePaperSizes)) {
+              plainPrinter.availablePaperSizes = [];
+            } else {
+              plainPrinter.availablePaperSizes = plainPrinter.availablePaperSizes.map(ps => ({
+                size: String(ps?.size || '').trim(),
+                enabled: ps?.enabled !== false
+              })).filter(ps => ps.size.length > 0);
+            }
+            
+            plainPrinter.queueCount = plainPrinter.queueCount || 0;
+            return plainPrinter;
+          } catch (error) {
+            console.error('Error normalizing printer from socket:', error);
+            return p;
           }
-          return prev;
-        });
+        };
+
+        const normalizedPrinter = normalizePrinter(printer);
+
+        if (normalizedPrinter.shop === selectedShop) {
+          setPrinters(prev => {
+            const exists = prev.find(p => {
+              const pId = String(p._id || '');
+              const nId = String(normalizedPrinter._id || '');
+              return pId === nId;
+            });
+            if (!exists) {
+              console.log('Adding new printer from socket:', normalizedPrinter.name);
+              return [...prev, normalizedPrinter];
+            }
+            return prev;
+          });
+        }
+      } catch (error) {
+        console.error('Error handling printer_created socket event:', error);
       }
     });
 

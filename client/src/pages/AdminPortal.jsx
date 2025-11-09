@@ -1,4 +1,4 @@
-import { useState, useEffect, useRef } from 'react';
+import { useState, useEffect, useRef, useMemo, useCallback } from 'react';
 import { useAuth } from '../context/AuthContext';
 import { adminAPI, printerAPI, notificationAPI } from '../services/api';
 import { connectSocket, disconnectSocket, joinAdminRoom, leaveAdminRoom, getSocket } from '../services/socket';
@@ -113,7 +113,7 @@ export default function AdminPortal({ shop }) {
   };
 
   // Handle file download - opens file in new tab via authenticated endpoint
-  const handleDownloadFile = async (filePath, fileName) => {
+  const handleDownloadFile = useCallback(async (filePath, fileName) => {
     try {
       if (!filePath) {
         toast.error('File path not found');
@@ -207,11 +207,13 @@ export default function AdminPortal({ shop }) {
         throw new Error('File is empty or could not be loaded');
       }
       
-      console.log('File loaded as ArrayBuffer:', {
-        size: arrayBuffer.byteLength,
-        contentType: contentType,
-        fileName: fileName
-      });
+      if (process.env.NODE_ENV === 'development') {
+        console.log('File loaded:', {
+          size: arrayBuffer.byteLength,
+          contentType: contentType,
+          fileName: fileName
+        });
+      }
       
       // Create a blob with the correct MIME type
       const blob = new Blob([arrayBuffer], { type: contentType });
@@ -224,26 +226,11 @@ export default function AdminPortal({ shop }) {
       
       // Create blob URL
       const blobUrl = URL.createObjectURL(blob);
-      console.log('Blob URL created:', {
-        url: blobUrl,
-        type: contentType,
-        size: blob.size
-      });
       
       // Determine file type
       const isPDF = contentType === 'application/pdf';
       const isImage = contentType.startsWith('image/');
       const isText = contentType.startsWith('text/');
-      
-      console.log('Opening file:', {
-        fileName,
-        contentType,
-        isPDF,
-        isImage,
-        isText,
-        blobSize: blob.size,
-        blobUrl
-      });
       
       if (isPDF) {
         // For PDFs, open the blob URL directly in a new window
@@ -263,7 +250,6 @@ export default function AdminPortal({ shop }) {
             try {
               if (newWindow.closed) {
                 clearInterval(checkWindow);
-                console.log('File viewer window was closed');
               }
             } catch (e) {
               // Cross-origin check failed, but window is likely open
@@ -278,8 +264,6 @@ export default function AdminPortal({ shop }) {
           toast.success('File opened in new tab');
           
           // Don't revoke the blob URL - let the browser handle cleanup when the tab closes
-          // Store reference to prevent garbage collection (optional)
-          console.log('PDF opened successfully in new window');
         } catch (error) {
           console.error('Error opening PDF in new window:', error);
           toast.dismiss(loadingToast);
@@ -507,25 +491,26 @@ export default function AdminPortal({ shop }) {
             return prev;
           });
         } else {
-          // If we're on ORDERS tab, remove the cancelled order
+          // If we're on ORDERS tab, remove the cancelled order (optimistic update)
           setOrders(prev => prev.filter(o => o._id !== order._id));
-          // Reload data to update queue positions and printer counts
+          // Reload data to update queue positions and printer counts (with delay to batch)
           if (currentTab === 'ORDERS' || currentTab === 'PRINTERS') {
-            loadData();
+            setTimeout(() => loadData(), 100);
           }
         }
-        // Reload notifications to show cancelled order notification
-        loadNotifications();
+        // Reload notifications (non-blocking)
+        setTimeout(() => loadNotifications(), 50);
       }
     });
 
     // Listen for printer updates
     socket.on('printer_updated', (printer) => {
       if (printer && printer.shop === shop) {
+        // Optimistic update
         setPrinters(prev => prev.map(p => p._id === printer._id ? { ...printer, queueCount: printer.queueCount } : p));
-        // Reload data to ensure orders list is updated with new queue counts
-        if (activeTab === 'ORDERS' || activeTab === 'PRINTERS') {
-          loadData();
+        // Only reload orders if on ORDERS tab (to update queue counts)
+        if (activeTabRef.current === 'ORDERS') {
+          setTimeout(() => loadData(), 100);
         }
       }
     });
@@ -547,9 +532,11 @@ export default function AdminPortal({ shop }) {
     });
 
     socket.on('printer_deleted', ({ id }) => {
+      // Optimistic update
       setPrinters(prev => prev.filter(p => p._id !== id));
-      if (activeTab === 'PRINTERS' || activeTab === 'ORDERS') {
-        loadData();
+      // Reload orders if on ORDERS tab to update printer grouping
+      if (activeTabRef.current === 'ORDERS') {
+        setTimeout(() => loadData(), 100);
       }
     });
 
@@ -616,7 +603,7 @@ export default function AdminPortal({ shop }) {
     };
   }, [user, shop, activeTab, isITAdmin]);
 
-  const loadData = async () => {
+  const loadData = useCallback(async () => {
     try {
       // Use ref to get current tab (avoids closure issues)
       const currentTab = activeTabRef.current;
@@ -638,13 +625,8 @@ export default function AdminPortal({ shop }) {
       } else if (currentTab === 'CANCELLED') {
         const res = await adminAPI.getOrders(shop);
         // Double-check we're still on the CANCELLED tab before updating state
-        // Filter for cancelled orders only - be very explicit
         if (activeTabRef.current === 'CANCELLED') {
-          const cancelledOrders = res.data.filter(o => {
-            // Explicitly check status is exactly 'Cancelled'
-            return o.status === 'Cancelled';
-          });
-          console.log('Loading cancelled orders:', cancelledOrders.length, 'out of', res.data.length, 'total orders');
+          const cancelledOrders = res.data.filter(o => o.status === 'Cancelled');
           setOrders(cancelledOrders);
         }
       } else if (currentTab === 'PRINTERS') {
@@ -669,20 +651,29 @@ export default function AdminPortal({ shop }) {
         }
       }
     } catch (error) {
-      console.error('Error loading data:', error);
+      if (process.env.NODE_ENV === 'development') {
+        console.error('Error loading data:', error);
+      }
       toast.error('Failed to load data');
     }
-  };
+  }, [shop, isITAdmin]);
 
-  const handleUpdateOrderStatus = async (orderId, status) => {
+  const handleUpdateOrderStatus = useCallback(async (orderId, status) => {
+    // Optimistic update - update UI immediately
+    setOrders(prev => prev.map(order => 
+      order._id === orderId ? { ...order, status } : order
+    ));
+    
     try {
       await adminAPI.updateOrderStatus(orderId, status);
-      toast.success('Order status updated');
+      // Reload to get updated queue positions and printer counts
       loadData();
     } catch (error) {
+      // Revert on error
+      loadData();
       toast.error('Failed to update order status');
     }
-  };
+  }, [loadData]);
 
   const handleApproveAccount = async (id) => {
     try {
@@ -845,7 +836,8 @@ export default function AdminPortal({ shop }) {
     }
   };
 
-  const getStatusColor = (status) => {
+  // Memoize status color function
+  const getStatusColor = useCallback((status) => {
     const colors = {
       'In Queue': 'bg-yellow-100 text-yellow-800',
       'Printing': 'bg-blue-100 text-blue-800',
@@ -855,48 +847,48 @@ export default function AdminPortal({ shop }) {
       'Cancelled': 'bg-red-100 text-red-800',
     };
     return colors[status] || 'bg-gray-100 text-gray-800';
-  };
+  }, []);
 
-  // Group orders by printer
-  const groupedOrders = orders.reduce((acc, order) => {
-    const printerName = order.printerId?.name || 'Unknown Printer';
-    if (!acc[printerName]) {
-      acc[printerName] = [];
-    }
-    acc[printerName].push(order);
-    return acc;
-  }, {});
+  // Memoize expensive computations
+  const groupedOrders = useMemo(() => {
+    return orders.reduce((acc, order) => {
+      const printerName = order.printerId?.name || 'Unknown Printer';
+      if (!acc[printerName]) {
+        acc[printerName] = [];
+      }
+      acc[printerName].push(order);
+      return acc;
+    }, {});
+  }, [orders]);
 
-  // Get list of printer names that have orders
-  const printerTabs = Object.keys(groupedOrders).sort();
+  // Memoize printer tabs
+  const printerTabs = useMemo(() => Object.keys(groupedOrders).sort(), [groupedOrders]);
 
   // Set default selected printer tab when orders change
   useEffect(() => {
     if (activeTab === 'ORDERS') {
       if (printerTabs.length > 0 && !selectedPrinterTab) {
-        // Set first printer as default
         setSelectedPrinterTab(printerTabs[0]);
       } else if (selectedPrinterTab && !printerTabs.includes(selectedPrinterTab)) {
-        // If selected printer no longer has orders, select first available
         setSelectedPrinterTab(printerTabs[0] || null);
       } else if (printerTabs.length === 1 && !selectedPrinterTab) {
-        // If only one printer, set it automatically
         setSelectedPrinterTab(printerTabs[0]);
       }
     } else {
-      // Reset selected printer tab when switching away from ORDERS tab
       setSelectedPrinterTab(null);
     }
   }, [activeTab, printerTabs, selectedPrinterTab]);
 
-  // Get orders for selected printer, sorted by queue position (ascending)
-  const selectedPrinterOrders = selectedPrinterTab ? (groupedOrders[selectedPrinterTab] || []).sort((a, b) => {
-    // Orders with queue positions come first, sorted ascending
-    // Orders without queue positions (Ready for Pickup, etc.) go to the end
-    const aQueue = a.queuePosition || 999999;
-    const bQueue = b.queuePosition || 999999;
-    return aQueue - bQueue;
-  }) : [];
+  // Memoize selected printer orders with sorting
+  const selectedPrinterOrders = useMemo(() => {
+    if (!selectedPrinterTab) return [];
+    const ordersForPrinter = groupedOrders[selectedPrinterTab] || [];
+    return ordersForPrinter.sort((a, b) => {
+      const aQueue = a.queuePosition || 999999;
+      const bQueue = b.queuePosition || 999999;
+      return aQueue - bQueue;
+    });
+  }, [selectedPrinterTab, groupedOrders]);
 
   return (
     <div className="min-h-screen">

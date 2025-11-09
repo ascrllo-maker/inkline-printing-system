@@ -126,31 +126,22 @@ router.get('/orders/:shop', protect, async (req, res) => {
       }
     }
 
+    // Use lean() for faster queries and select only needed fields
     const orders = await Order.find(query)
       .populate('userId', 'fullName email')
-      .populate('printerId')
+      .populate('printerId', 'name shop status availablePaperSizes')
+      .select('orderNumber userId printerId shop fileName filePath gridfsFileId paperSize orientation colorType copies status queuePosition createdAt completedAt')
+      .lean()
       .sort({ createdAt: -1 });
 
-    // Calculate queue positions for orders that need them
-    const ordersWithQueuePosition = await Promise.all(orders.map(async (order) => {
-      // Convert to plain object to modify
-      const orderObj = order.toObject ? order.toObject() : { ...order };
-      
-      // Only calculate queue position for orders with status "In Queue"
-      if (orderObj.status === 'In Queue') {
-        const printerId = orderObj.printerId._id || orderObj.printerId;
-        const queuePosition = await Order.countDocuments({
-          printerId: printerId,
-          status: 'In Queue',
-          createdAt: { $lte: orderObj.createdAt }
-        });
-        orderObj.queuePosition = queuePosition;
-      } else {
-        // Orders with other statuses should not have queue positions
-        orderObj.queuePosition = 0;
+    // Queue positions are already calculated and stored in the database
+    // Just ensure non-queue orders have queuePosition = 0
+    const ordersWithQueuePosition = orders.map(order => {
+      if (order.status !== 'In Queue') {
+        order.queuePosition = 0;
       }
-      return orderObj;
-    }));
+      return order;
+    });
 
     res.json(ordersWithQueuePosition);
   } catch (error) {
@@ -220,29 +211,43 @@ router.put('/update-order-status/:id', protect, async (req, res) => {
       await Order.findByIdAndUpdate(order._id, { queuePosition: 0 });
     }
 
-    // Recalculate queue positions for all "In Queue" orders on this printer when status changes
-    // This ensures queue positions are accurate when orders move through the queue
-    if (oldStatus !== status) {
+    // Optimize queue position recalculation using bulk operations
+    // Only recalculate if order status changed to/from "In Queue"
+    if (oldStatus !== status && (oldStatus === 'In Queue' || status === 'In Queue')) {
+      const io = req.app.get('io');
+      
+      // Use aggregation to calculate queue positions efficiently
       const affectedOrders = await Order.find({
         printerId: printerId,
         status: 'In Queue'
-      }).populate('userId', '_id');
+      }).select('_id userId createdAt').lean().sort({ createdAt: 1 });
 
-      // Recalculate queue positions for all affected orders
-      for (const affectedOrder of affectedOrders) {
-        const queuePosition = await Order.countDocuments({
-          printerId: printerId,
-          status: 'In Queue',
-          createdAt: { $lte: affectedOrder.createdAt }
-        });
-        await Order.findByIdAndUpdate(affectedOrder._id, { queuePosition });
+      // Calculate queue positions in a single pass
+      const updateOps = affectedOrders.map((affectedOrder, index) => {
+        const queuePosition = index + 1;
+        return {
+          updateOne: {
+            filter: { _id: affectedOrder._id },
+            update: { $set: { queuePosition } }
+          }
+        };
+      });
+
+      // Bulk update all queue positions at once
+      if (updateOps.length > 0) {
+        await Order.bulkWrite(updateOps);
         
-        // Emit update to the user who owns this order
-        const io = req.app.get('io');
-        if (io && affectedOrder.userId && affectedOrder.userId._id) {
-          io.to(affectedOrder.userId._id.toString()).emit('order_queue_updated', {
-            orderId: affectedOrder._id,
-            queuePosition
+        // Emit updates to users (non-blocking)
+        if (io) {
+          setImmediate(() => {
+            affectedOrders.forEach((affectedOrder, index) => {
+              if (affectedOrder.userId) {
+                io.to(affectedOrder.userId.toString()).emit('order_queue_updated', {
+                  orderId: affectedOrder._id,
+                  queuePosition: index + 1
+                });
+              }
+            });
           });
         }
       }
@@ -460,21 +465,37 @@ router.get('/users/:shop', protect, async (req, res) => {
       query.isBSIT = true;
     }
 
-    const users = await User.find(query).select('-password').sort({ createdAt: -1 });
-
-    // Check which users have active orders (not completed or cancelled)
-    const usersWithActiveOrders = await Promise.all(users.map(async (user) => {
-      const userObj = user.toObject ? user.toObject() : { ...user };
-      
-      // Check if user has active orders for this shop
-      const activeOrderCount = await Order.countDocuments({
-        userId: user._id,
-        shop: shop,
-        status: { $nin: ['Completed', 'Cancelled'] }
-      });
-      
-      userObj.hasActiveOrders = activeOrderCount > 0;
-      return userObj;
+    // Use lean() for faster queries
+    const users = await User.find(query)
+      .select('fullName email accountStatus bannedFrom createdAt')
+      .lean()
+      .sort({ createdAt: -1 });
+    
+    // Batch check for active orders using aggregation pipeline (much faster)
+    const userIds = users.map(u => u._id);
+    const activeOrders = await Order.aggregate([
+      {
+        $match: {
+          userId: { $in: userIds },
+          shop: shop,
+          status: { $nin: ['Completed', 'Cancelled'] }
+        }
+      },
+      {
+        $group: {
+          _id: '$userId',
+          count: { $sum: 1 }
+        }
+      }
+    ]);
+    
+    // Create a map of userId -> hasActiveOrders
+    const activeOrdersMap = new Map(activeOrders.map(ao => [ao._id.toString(), ao.count > 0]));
+    
+    // Add hasActiveOrders to each user
+    const usersWithActiveOrders = users.map(user => ({
+      ...user,
+      hasActiveOrders: activeOrdersMap.get(user._id.toString()) || false
     }));
 
     res.json(usersWithActiveOrders);
@@ -735,9 +756,11 @@ router.get('/violations/:shop', protect, async (req, res) => {
       return res.status(403).json({ message: 'Access denied' });
     }
 
-    // Only get unresolved violations
+    // Use lean() for faster queries and select only needed fields
     const violations = await Violation.find({ shop, resolved: false })
       .populate('userId', 'fullName email')
+      .select('userId shop reason resolved createdAt')
+      .lean()
       .sort({ createdAt: -1 });
 
     res.json(violations);

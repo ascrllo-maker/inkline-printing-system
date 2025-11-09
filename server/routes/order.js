@@ -232,35 +232,44 @@ router.post('/create', protect, uploadFile.single('file'), async (req, res) => {
       console.error('Socket.IO instance not available');
     }
 
-    // Recalculate queue positions for all "In Queue" orders on this printer
+    // Optimize queue position recalculation using bulk operations
     if (io) {
-      try {
-        const affectedOrders = await Order.find({
-          printerId: printerId,
-          status: 'In Queue'
-        }).populate('userId', '_id');
-
-        // Recalculate queue positions for all affected orders
-        for (const affectedOrder of affectedOrders) {
-          const queuePosition = await Order.countDocuments({
+      setImmediate(async () => {
+        try {
+          const affectedOrders = await Order.find({
             printerId: printerId,
-            status: 'In Queue',
-            createdAt: { $lte: affectedOrder.createdAt }
+            status: 'In Queue'
+          }).select('_id userId createdAt').lean().sort({ createdAt: 1 });
+
+          // Calculate queue positions in a single pass and bulk update
+          const updateOps = affectedOrders.map((affectedOrder, index) => {
+            const queuePosition = index + 1;
+            return {
+              updateOne: {
+                filter: { _id: affectedOrder._id },
+                update: { $set: { queuePosition } }
+              }
+            };
           });
-          await Order.findByIdAndUpdate(affectedOrder._id, { queuePosition });
-          
-          // Emit queue position update to the user who owns this order
-          if (affectedOrder.userId && affectedOrder.userId._id) {
-            io.to(affectedOrder.userId._id.toString()).emit('order_queue_updated', {
-              orderId: affectedOrder._id,
-              queuePosition
+
+          // Bulk update all queue positions at once
+          if (updateOps.length > 0) {
+            await Order.bulkWrite(updateOps);
+            
+            // Emit updates to users
+            affectedOrders.forEach((affectedOrder, index) => {
+              if (affectedOrder.userId) {
+                io.to(affectedOrder.userId.toString()).emit('order_queue_updated', {
+                  orderId: affectedOrder._id,
+                  queuePosition: index + 1
+                });
+              }
             });
           }
+        } catch (queueError) {
+          console.error('Error recalculating queue positions:', queueError);
         }
-      } catch (queueError) {
-        console.error('Error recalculating queue positions:', queueError);
-        // Continue even if queue position recalculation fails
-      }
+      });
     }
 
     // Send response immediately before emitting socket events
@@ -295,30 +304,21 @@ router.post('/create', protect, uploadFile.single('file'), async (req, res) => {
 // @access  Private
 router.get('/my-orders', protect, async (req, res) => {
   try {
+    // Use lean() for faster queries and select only needed fields
     const orders = await Order.find({ userId: req.user._id })
-      .populate('printerId')
+      .populate('printerId', 'name shop status availablePaperSizes')
+      .select('orderNumber printerId shop fileName filePath gridfsFileId paperSize orientation colorType copies status queuePosition createdAt completedAt')
+      .lean()
       .sort({ createdAt: -1 });
 
-    // Calculate queue positions for orders that need them
-    const ordersWithQueuePosition = await Promise.all(orders.map(async (order) => {
-      // Convert to plain object to modify
-      const orderObj = order.toObject ? order.toObject() : { ...order };
-      
-      // Only calculate queue position for orders with status "In Queue"
-      if (orderObj.status === 'In Queue') {
-        const printerId = orderObj.printerId._id || orderObj.printerId;
-        const queuePosition = await Order.countDocuments({
-          printerId: printerId,
-          status: 'In Queue',
-          createdAt: { $lte: orderObj.createdAt }
-        });
-        orderObj.queuePosition = queuePosition;
-      } else {
-        // Orders with other statuses should not have queue positions
-        orderObj.queuePosition = 0;
+    // Queue positions are already calculated and stored in the database
+    // Just ensure non-queue orders have queuePosition = 0
+    const ordersWithQueuePosition = orders.map(order => {
+      if (order.status !== 'In Queue') {
+        order.queuePosition = 0;
       }
-      return orderObj;
-    }));
+      return order;
+    });
 
     res.json(ordersWithQueuePosition);
   } catch (error) {

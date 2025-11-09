@@ -119,9 +119,33 @@ export default function AdminPortal({ shop }) {
       }
 
       // Get the content type from response headers
-      const contentType = response.headers.get('content-type') || 'application/octet-stream';
+      let contentType = response.headers.get('content-type') || 'application/octet-stream';
       
-      // Get the file as a blob with the correct MIME type
+      // If content-type is generic or missing, try to infer from file extension
+      if (contentType === 'application/octet-stream' || !contentType) {
+        const extension = fileName.split('.').pop()?.toLowerCase();
+        const mimeTypes = {
+          'pdf': 'application/pdf',
+          'doc': 'application/msword',
+          'docx': 'application/vnd.openxmlformats-officedocument.wordprocessingml.document',
+          'ppt': 'application/vnd.ms-powerpoint',
+          'pptx': 'application/vnd.openxmlformats-officedocument.presentationml.presentation',
+          'xls': 'application/vnd.ms-excel',
+          'xlsx': 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
+          'jpg': 'image/jpeg',
+          'jpeg': 'image/jpeg',
+          'png': 'image/png',
+          'gif': 'image/gif',
+          'txt': 'text/plain',
+          'html': 'text/html',
+          'htm': 'text/html'
+        };
+        if (extension && mimeTypes[extension]) {
+          contentType = mimeTypes[extension];
+        }
+      }
+      
+      // Get the file as a blob
       const blob = await response.blob();
       
       // Create a new blob with the explicit content type to ensure browser renders it correctly

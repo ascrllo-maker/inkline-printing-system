@@ -97,6 +97,9 @@ export default function AdminPortal({ shop }) {
         return;
       }
 
+      // Show loading toast
+      const loadingToast = toast.loading('Loading file...');
+
       // Get the token for authentication
       const token = localStorage.getItem('token');
       
@@ -115,6 +118,7 @@ export default function AdminPortal({ shop }) {
       });
 
       if (!response.ok) {
+        toast.dismiss(loadingToast);
         throw new Error('Failed to load file');
       }
 
@@ -145,14 +149,23 @@ export default function AdminPortal({ shop }) {
         }
       }
       
-      // Get the file as a blob
-      const blob = await response.blob();
+      // Get the file as an array buffer first to ensure we have all the data
+      const arrayBuffer = await response.arrayBuffer();
       
       // Create a new blob with the explicit content type to ensure browser renders it correctly
-      const typedBlob = new Blob([blob], { type: contentType });
+      const typedBlob = new Blob([arrayBuffer], { type: contentType });
+      
+      // Verify blob was created successfully
+      if (!typedBlob || typedBlob.size === 0) {
+        toast.dismiss(loadingToast);
+        throw new Error('File is empty or could not be loaded');
+      }
       
       // Create a temporary URL for the blob
       const blobUrl = window.URL.createObjectURL(typedBlob);
+      
+      // Wait a bit to ensure blob URL is ready
+      await new Promise(resolve => setTimeout(resolve, 100));
       
       // Open the file in a new tab
       const newWindow = window.open(blobUrl, '_blank', 'noopener,noreferrer');
@@ -166,22 +179,22 @@ export default function AdminPortal({ shop }) {
         link.rel = 'noopener noreferrer';
         document.body.appendChild(link);
         link.click();
-        document.body.removeChild(link);
+        // Wait a bit before removing the link
+        setTimeout(() => {
+          document.body.removeChild(link);
+        }, 100);
       }
       
-      // Clean up the blob URL after a delay to allow the new tab to load
-      // Note: We wait 10 seconds to ensure the new tab has fully loaded the blob URL
-      // The browser will clean up blob URLs when tabs are closed, but we revoke
-      // to prevent memory leaks if many files are opened
-      setTimeout(() => {
-        try {
-          window.URL.revokeObjectURL(blobUrl);
-        } catch (e) {
-          // Ignore errors if URL was already revoked
-        }
-      }, 10000);
-      
+      toast.dismiss(loadingToast);
       toast.success('File opened in new tab');
+      
+      // Don't revoke the blob URL immediately - let the browser handle cleanup
+      // The blob URL will be automatically cleaned up when:
+      // 1. The new tab is closed
+      // 2. The page is refreshed
+      // 3. The browser is closed
+      // This ensures the file is always accessible in the new tab
+      
     } catch (error) {
       console.error('Error opening file:', error);
       toast.error('Failed to open file. Please try again.');

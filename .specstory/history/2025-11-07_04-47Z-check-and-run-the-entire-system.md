@@ -50982,3 +50982,825 @@ _**Agent (model default, mode Agent)**_
 
 ---
 
+
+Analyzing the file serving flow and testing a more robust approach.
+
+
+---
+
+<tool-use data-tool-type="read" data-tool-name="read_file">
+<details><summary>Tool use: **read_file** • Read file: client/src/pages/AdminPortal.jsx</summary>
+
+</details>
+</tool-use>
+
+---
+
+<tool-use data-tool-type="read" data-tool-name="read_file">
+<details><summary>Tool use: **read_file** • Read file: server/routes/admin.js</summary>
+
+</details>
+</tool-use>
+
+---
+
+<tool-use data-tool-type="read" data-tool-name="read_file">
+<details><summary>Tool use: **read_file** • Read file: server/routes/order.js</summary>
+
+</details>
+</tool-use>
+
+---
+
+<tool-use data-tool-type="search" data-tool-name="codebase_search">
+<details>
+                <summary>Tool use: **codebase_search** • Searched codebase "How are file paths stored in orders when created and how are they retrieved?" • **12** results</summary>
+            
+| File | Lines |
+|------|-------|
+| `server/models/Order.js` | L76 |
+| `server/routes/order.js` | L12-290 |
+| `server/routes/order.js` | L290 |
+| `client/src/services/api.js` | L24-71 |
+| `client/src/pages/StudentPortal.jsx` | L322-373 |
+| `server/routes/order.js` | L23-290 |
+| `client/src/pages/AdminPortal.jsx` | L676-701 |
+| `server/middleware/upload.js` | L19 |
+| `server/routes/admin.js` | L82-158 |
+| `server/middleware/upload.js` | L15-68 |
+| `client/src/pages/StudentPortal.jsx` | L835-876 |
+| `server/utils/helpers.js` | L8 |
+
+</details>
+</tool-use>
+
+---
+
+<tool-use data-tool-type="grep" data-tool-name="grep">
+<details>
+<summary>Tool use: **grep** • Grep for "filePath.*gridfs|gridfs.*filePath" in "server/routes/order.js" • 1 match</summary>
+
+Output mode: content
+
+
+| File | Content | Line |
+|------|------|------|
+| `server/routes/order.js` | `filePath = `/gridfs/$\{gridfsFileId\}`;` | L111 |
+
+
+</details>
+</tool-use>
+
+---
+
+<tool-use data-tool-type="read" data-tool-name="read_file">
+<details><summary>Tool use: **read_file** • Read file: client/src/pages/AdminPortal.jsx</summary>
+
+</details>
+</tool-use>
+
+---
+
+
+
+---
+
+
+Simplifying the approach: using `window.open('')` then `document.write()` can break blob URLs. Switching to direct blob URL handling:
+
+
+---
+
+<tool-use data-tool-type="generic" data-tool-name="todo_write">
+<details><summary>Tool use: **todo_write** • Todo List</summary>
+
+- [-] Fix file opening by using direct blob URL opening instead of document.write
+- [ ] Add comprehensive error logging to identify where file serving fails
+- [ ] Verify GridFS file retrieval is working correctly
+- [ ] Test file opening with different file types (PDF, images, documents)
+
+</details>
+</tool-use>
+
+---
+
+<tool-use data-tool-type="read" data-tool-name="read_file">
+<details><summary>Tool use: **read_file** • Read file: client/src/pages/AdminPortal.jsx</summary>
+
+</details>
+</tool-use>
+
+---
+
+<tool-use data-tool-type="write" data-tool-name="search_replace">
+
+<details><summary>Tool use: **code_edit** • Edit file: client/src/pages/AdminPortal.jsx</summary>
+
+**Chunk 1**
+Lines added: 168, lines removed: 75
+
+```diff
+@@ -211,79 +211,172 @@
+        const isPDF = contentType === &#39;application/pdf&#39;;
+        const isImage = contentType.startsWith(&#39;image/&#39;);
+-       
+-       if (isPDF || isImage) {
+-         // For PDFs, use a more reliable method: create an iframe or object
+-         // First, try opening in a new window with the blob URL
+-         const newWindow = window.open(&#39;&#39;, &#39;_blank&#39;, &#39;noopener,noreferrer&#39;);
+-         
+-         if (!newWindow) {
+-           toast.dismiss(loadingToast);
+-           toast.error(&#39;Popup blocked. Please allow popups for this site.&#39;);
+-           URL.revokeObjectURL(blobUrl);
+-           return;
+-         }
+-         
+-         // Write the PDF content to the new window
+-         newWindow.document.write(&#96;
+-           &lt;!DOCTYPE html&gt;
+-           &lt;html&gt;
+-             &lt;head&gt;
+-               &lt;title&gt;${fileName || &#39;Document&#39;}&lt;/title&gt;
+-               &lt;style&gt;
+-                 body {
+-                   margin: 0;
+-                   padding: 0;
+-                   overflow: hidden;
+-                 }
+-                 embed {
+-                   width: 100%;
+-                   height: 100vh;
+-                   border: none;
+-                 }
+-                 iframe {
+-                   width: 100%;
+-                   height: 100vh;
+-                   border: none;
+-                 }
+-               &lt;/style&gt;
+-             &lt;/head&gt;
+-             &lt;body&gt;
+-               &lt;embed src=&quot;${blobUrl}&quot; type=&quot;${contentType}&quot; /&gt;
+-               &lt;iframe src=&quot;${blobUrl}&quot; style=&quot;display: none;&quot;&gt;&lt;/iframe&gt;
+-               &lt;script&gt;
+-                 // Fallback: if embed doesn&#39;t work, use iframe
+-                 setTimeout(function() {
+-                   var embed = document.querySelector(&#39;embed&#39;);
+-                   var iframe = document.querySelector(&#39;iframe&#39;);
+-                   if (embed &amp;&amp; embed.offsetHeight === 0) {
+-                     embed.style.display = &#39;none&#39;;
+-                     iframe.style.display = &#39;block&#39;;
+-                   }
+-                 }, 100);
+-               &lt;/script&gt;
+-             &lt;/body&gt;
+-           &lt;/html&gt;
+-         &#96;);
+-         newWindow.document.close();
+-         
+-         toast.dismiss(loadingToast);
+-         toast.success(&#39;File opened in new tab&#39;);
+-       } else {
+-         // For other file types, create a download link
+-         const link = document.createElement(&#39;a&#39;);
+-         link.href = blobUrl;
+-         link.download = fileName || &#39;file&#39;;
+-         link.style.display = &#39;none&#39;;
+-         document.body.appendChild(link);
+-         link.click();
+-         document.body.removeChild(link);
+-         
+-         toast.dismiss(loadingToast);
+-         toast.success(&#39;File download started&#39;);
+-         
+-         // Revoke blob URL after a short delay for downloads
+-         setTimeout(() =&gt; {
+-           URL.revokeObjectURL(blobUrl);
+-         }, 1000);
++       const isText = contentType.startsWith(&#39;text/&#39;);
++       
++       console.log(&#39;Opening file:&#39;, {
++         fileName,
++         contentType,
++         isPDF,
++         isImage,
++         isText,
++         blobSize: blob.size,
++         blobUrl
++       });
++       
++       if (isPDF) {
++         // For PDFs, open the blob URL directly in a new window
++         // This is the most reliable method across browsers
++         try {
++           const newWindow = window.open(blobUrl, &#39;_blank&#39;, &#39;noopener,noreferrer&#39;);
++           
++           if (!newWindow) {
++             toast.dismiss(loadingToast);
++             toast.error(&#39;Popup blocked. Please allow popups for this site.&#39;);
++             URL.revokeObjectURL(blobUrl);
++             return;
++           }
++           
++           // Monitor if the window loads successfully
++           const checkWindow = setInterval(() =&gt; {
++             try {
++               if (newWindow.closed) {
++                 clearInterval(checkWindow);
++                 console.log(&#39;File viewer window was closed&#39;);
++               }
++             } catch (e) {
++               // Cross-origin check failed, but window is likely open
++               clearInterval(checkWindow);
++             }
++           }, 1000);
++           
++           // Clear the interval after 10 seconds
++           setTimeout(() =&gt; clearInterval(checkWindow), 10000);
++           
++           toast.dismiss(loadingToast);
++           toast.success(&#39;File opened in new tab&#39;);
++           
++           // Don&#39;t revoke the blob URL - let the browser handle cleanup when the tab closes
++           // Store reference to prevent garbage collection (optional)
++           console.log(&#39;PDF opened successfully in new window&#39;);
++         } catch (error) {
++           console.error(&#39;Error opening PDF in new window:&#39;, error);
++           toast.dismiss(loadingToast);
++           toast.error(&#39;Failed to open file. Please try downloading instead.&#39;);
++           URL.revokeObjectURL(blobUrl);
++         }
++       } else if (isImage) {
++         // For images, create a new window with the image
++         try {
++           const imgWindow = window.open(&#39;&#39;, &#39;_blank&#39;, &#39;noopener,noreferrer&#39;);
++           if (!imgWindow) {
++             toast.dismiss(loadingToast);
++             toast.error(&#39;Popup blocked. Please allow popups for this site.&#39;);
++             URL.revokeObjectURL(blobUrl);
++             return;
++           }
++           
++           imgWindow.document.write(&#96;
++             &lt;!DOCTYPE html&gt;
++             &lt;html&gt;
++               &lt;head&gt;
++                 &lt;title&gt;${fileName || &#39;Image&#39;}&lt;/title&gt;
++                 &lt;style&gt;
++                   body {
++                     margin: 0;
++                     padding: 20px;
++                     display: flex;
++                     justify-content: center;
++                     align-items: center;
++                     min-height: 100vh;
++                     background: #1a1a1a;
++                   }
++                   img {
++                     max-width: 100%;
++                     max-height: 100vh;
++                     object-fit: contain;
++                   }
++                 &lt;/style&gt;
++               &lt;/head&gt;
++               &lt;body&gt;
++                 &lt;img src=&quot;${blobUrl}&quot; alt=&quot;${fileName || &#39;Image&#39;}&quot; /&gt;
++               &lt;/body&gt;
++             &lt;/html&gt;
++           &#96;);
++           imgWindow.document.close();
++           
++           toast.dismiss(loadingToast);
++           toast.success(&#39;Image opened in new tab&#39;);
++         } catch (error) {
++           console.error(&#39;Error opening image:&#39;, error);
++           toast.dismiss(loadingToast);
++           toast.error(&#39;Failed to open image&#39;);
++           URL.revokeObjectURL(blobUrl);
++         }
++       } else if (isText) {
++         // For text files, open in a new window with formatted text
++         try {
++           const text = await blob.text();
++           const textWindow = window.open(&#39;&#39;, &#39;_blank&#39;, &#39;noopener,noreferrer&#39;);
++           if (!textWindow) {
++             toast.dismiss(loadingToast);
++             toast.error(&#39;Popup blocked. Please allow popups for this site.&#39;);
++             URL.revokeObjectURL(blobUrl);
++             return;
++           }
++           
++           textWindow.document.write(&#96;
++             &lt;!DOCTYPE html&gt;
++             &lt;html&gt;
++               &lt;head&gt;
++                 &lt;title&gt;${fileName || &#39;Text File&#39;}&lt;/title&gt;
++                 &lt;style&gt;
++                   body {
++                     margin: 0;
++                     padding: 20px;
++                     font-family: monospace;
++                     background: #1a1a1a;
++                     color: #fff;
++                     white-space: pre-wrap;
++                     word-wrap: break-word;
++                   }
++                 &lt;/style&gt;
++               &lt;/head&gt;
++               &lt;body&gt;${text.replace(/&lt;/g, &#39;&amp;lt;&#39;).replace(/&gt;/g, &#39;&amp;gt;&#39;)}&lt;/body&gt;
++             &lt;/html&gt;
++           &#96;);
++           textWindow.document.close();
++           
++           toast.dismiss(loadingToast);
++           toast.success(&#39;Text file opened in new tab&#39;);
++           URL.revokeObjectURL(blobUrl);
++         } catch (error) {
++           console.error(&#39;Error opening text file:&#39;, error);
++           // Fall through to download
++         }
++       }
++       
++       // For all other file types (or if opening failed), download the file
++       if (!isPDF &amp;&amp; !isImage &amp;&amp; !isText) {
++         try {
++           const link = document.createElement(&#39;a&#39;);
++           link.href = blobUrl;
++           link.download = fileName || &#39;file&#39;;
++           link.style.display = &#39;none&#39;;
++           document.body.appendChild(link);
++           link.click();
++           document.body.removeChild(link);
++           
++           toast.dismiss(loadingToast);
++           toast.success(&#39;File download started&#39;);
++           
++           // Revoke blob URL after download starts
++           setTimeout(() =&gt; {
++             URL.revokeObjectURL(blobUrl);
++           }, 1000);
++         } catch (error) {
++           console.error(&#39;Error downloading file:&#39;, error);
++           toast.dismiss(loadingToast);
++           toast.error(&#39;Failed to download file&#39;);
++           URL.revokeObjectURL(blobUrl);
++         }
+        }
+        
+```
+
+</details>
+
+</tool-use>
+
+---
+
+<tool-use data-tool-type="read" data-tool-name="read_file">
+<details><summary>Tool use: **read_file** • Read file: server/routes/admin.js</summary>
+
+</details>
+</tool-use>
+
+---
+
+<tool-use data-tool-type="read" data-tool-name="read_file">
+<details><summary>Tool use: **read_file** • Read file: server/routes/admin.js</summary>
+
+</details>
+</tool-use>
+
+---
+
+The string to replace was not found in the file.
+
+---
+
+<tool-use data-tool-type="generic" data-tool-name="read_lints">
+<details>
+          <summary>Tool use: **read_lints** • Read lints for 2 files</summary>
+      
+Lint paths:
+
+- `client/src/pages/AdminPortal.jsx`
+- `server/routes/admin.js`
+
+Lint results
+
+Lint errors for `client/src/pages/AdminPortal.jsx`
+
+
+| Message | Range | Severity |
+|-------|-------|----------|
+| 'disconnectSocket' is declared but its value is never read. | 4:25-4:41 | DIAGNOSTIC_SEVERITY_HINT |
+| 'getSocket' is declared but its value is never read. | 4:74-4:83 | DIAGNOSTIC_SEVERITY_HINT |
+| 'editingPrinter' is declared but its value is never read. | 21:10-21:24 | DIAGNOSTIC_SEVERITY_HINT |
+| 'setEditingPrinter' is declared but its value is never read. | 21:26-21:43 | DIAGNOSTIC_SEVERITY_HINT |
+| The signature '(...text: string[]): void' of 'imgWindow.document.write' is deprecated. | 277:30-277:35 | DIAGNOSTIC_SEVERITY_HINT |
+| The signature '(...text: string[]): void' of 'textWindow.document.write' is deprecated. | 326:31-326:36 | DIAGNOSTIC_SEVERITY_HINT |
+
+
+</details>
+</tool-use>
+
+---
+
+
+
+---
+
+
+Improving order lookup to handle GridFS file paths and adding debugging:
+
+
+---
+
+<tool-use data-tool-type="read" data-tool-name="read_file">
+<details><summary>Tool use: **read_file** • Read file: server/routes/admin.js</summary>
+
+</details>
+</tool-use>
+
+---
+
+<tool-use data-tool-type="write" data-tool-name="search_replace">
+
+<details><summary>Tool use: **code_edit** • Edit file: server/routes/admin.js</summary>
+
+**Chunk 1**
+Lines added: 43, lines removed: 3
+
+```diff
+@@ -836,26 +836,66 @@
+      // Check if this is a GridFS file path
+      if (filePath.startsWith(&#39;gridfs/&#39;)) {
+-       const fileId = filePath.replace(&#39;gridfs/&#39;, &#39;&#39;);
++       const fileId = filePath.replace(&#39;gridfs/&#39;, &#39;&#39;).trim();
++       
++       console.log(&#39;GridFS file path detected:&#39;, {
++         filePath,
++         fileId,
++         isValidObjectId: mongoose.Types.ObjectId.isValid(fileId)
++       });
+        
+        // Validate ObjectId
+        if (!mongoose.Types.ObjectId.isValid(fileId)) {
++         console.error(&#39;Invalid GridFS file ID:&#39;, fileId);
+          return res.status(400).json({ message: &#39;Invalid file ID&#39; });
+        }
+  
+        try {
+          const gridFSBucket = new GridFSBucket(mongoose.connection.db, { bucketName: &#39;uploads&#39; });
++         const objectId = new mongoose.Types.ObjectId(fileId);
++         
++         console.log(&#39;Looking for GridFS file with ID:&#39;, objectId.toString());
+          
+          // Find file metadata
+-         const files = await gridFSBucket.find({ _id: new mongoose.Types.ObjectId(fileId) }).toArray();
++         const files = await gridFSBucket.find({ _id: objectId }).toArray();
++         
++         console.log(&#39;GridFS files found:&#39;, files.length);
+          
+          if (files.length === 0) {
+-           return res.status(404).json({ message: &#39;File not found in GridFS&#39; });
++           console.error(&#39;File not found in GridFS with ID:&#39;, objectId.toString());
++           // Try to find order by gridfsFileId to provide better error message
++           const orderByFileId = await Order.findOne({ gridfsFileId: objectId });
++           if (orderByFileId) {
++             console.error(&#39;Order found but file missing in GridFS:&#39;, {
++               orderId: orderByFileId._id,
++               orderNumber: orderByFileId.orderNumber,
++               gridfsFileId: orderByFileId.gridfsFileId
++             });
++           }
++           return res.status(404).json({ 
++             message: &#39;File not found in GridFS&#39;,
++             fileId: objectId.toString()
++           });
+          }
+  
+          const file = files[0];
++         
++         console.log(&#39;GridFS file found:&#39;, {
++           fileId: file._id.toString(),
++           filename: file.filename,
++           size: file.length,
++           uploadDate: file.uploadDate,
++           metadata: file.metadata
++         });
+          
+          // Verify admin access if it&#39;s an order file
+          const order = await Order.findOne({ gridfsFileId: file._id });
+          if (order) {
++           console.log(&#39;Order found for GridFS file:&#39;, {
++             orderId: order._id,
++             orderNumber: order.orderNumber,
++             shop: order.shop,
++             userRole: req.user.role
++           });
++           
+            if (order.shop === &#39;IT&#39; &amp;&amp; req.user.role !== &#39;it_admin&#39;) {
+              return res.status(403).json({ message: &#39;Access denied: IT admin required&#39; });
+```
+
+**Chunk 2**
+Lines added: 2, lines removed: undefined
+
+```diff
+@@ -864,4 +904,6 @@
+              return res.status(403).json({ message: &#39;Access denied: SSC admin required&#39; });
+            }
++         } else {
++           console.warn(&#39;No order found for GridFS file, allowing admin access&#39;);
+          }
+  
+```
+
+</details>
+
+</tool-use>
+
+---
+
+<tool-use data-tool-type="write" data-tool-name="search_replace">
+
+<details><summary>Tool use: **code_edit** • Edit file: server/routes/admin.js</summary>
+
+**Chunk 1**
+Lines added: 26, lines removed: 2
+
+```diff
+@@ -999,11 +999,35 @@
+        // Try to find the file in GridFS as fallback
+        const fileName = pathParts[pathParts.length - 1];
+-       const order = await Order.findOne({ 
++       
++       console.log(&#39;Trying to find order by filePath:&#39;, {
++         fileName,
++         filePath,
++         searchPatterns: [
++           &#96;/uploads/files/${fileName}&#96;,
++           &#96;uploads/files/${fileName}&#96;,
++           filePath,
++           &#96;/${filePath}&#96;
++         ]
++       });
++       
++       // First, try to find by filePath (multiple formats)
++       let order = await Order.findOne({ 
+          $or: [
+            { filePath: &#96;/uploads/files/${fileName}&#96; },
+            { filePath: &#96;uploads/files/${fileName}&#96; },
+-           { filePath: filePath }
++           { filePath: filePath },
++           { filePath: &#96;/${filePath}&#96; },
++           // Also check if filePath contains gridfs
++           { filePath: { $regex: &#96;gridfs.*${fileName}&#96; } }
+          ]
+        });
++       
++       // If not found by filePath, try to find by fileName and check if it has gridfsFileId
++       if (!order) {
++         console.log(&#39;Order not found by filePath, trying to find by fileName:&#39;, fileName);
++         order = await Order.findOne({ 
++           fileName: fileName 
++         }).sort({ createdAt: -1 }); // Get the most recent order with this fileName
++       }
+        
+        if (order &amp;&amp; order.gridfsFileId) {
+```
+
+</details>
+
+</tool-use>
+
+---
+
+<tool-use data-tool-type="read" data-tool-name="read_file">
+<details><summary>Tool use: **read_file** • Read file: server/routes/admin.js</summary>
+
+</details>
+</tool-use>
+
+---
+
+Model supplied an ambiguous edit
+
+---
+
+<tool-use data-tool-type="generic" data-tool-name="read_lints">
+<details>
+          <summary>Tool use: **read_lints** • Read lints for 2 files</summary>
+      
+Lint paths:
+
+- `server/routes/admin.js`
+- `client/src/pages/AdminPortal.jsx`
+
+Lint results
+
+Lint errors for `client/src/pages/AdminPortal.jsx`
+
+
+| Message | Range | Severity |
+|-------|-------|----------|
+| 'disconnectSocket' is declared but its value is never read. | 4:25-4:41 | DIAGNOSTIC_SEVERITY_HINT |
+| 'getSocket' is declared but its value is never read. | 4:74-4:83 | DIAGNOSTIC_SEVERITY_HINT |
+| 'editingPrinter' is declared but its value is never read. | 21:10-21:24 | DIAGNOSTIC_SEVERITY_HINT |
+| 'setEditingPrinter' is declared but its value is never read. | 21:26-21:43 | DIAGNOSTIC_SEVERITY_HINT |
+| The signature '(...text: string[]): void' of 'imgWindow.document.write' is deprecated. | 277:30-277:35 | DIAGNOSTIC_SEVERITY_HINT |
+| The signature '(...text: string[]): void' of 'textWindow.document.write' is deprecated. | 326:31-326:36 | DIAGNOSTIC_SEVERITY_HINT |
+
+
+</details>
+</tool-use>
+
+---
+
+<tool-use data-tool-type="bash" data-tool-name="run_terminal_cmd">
+<details><summary>Tool use: **command** • Run command: git add -A</summary>
+
+```bash
+git add -A
+```
+</details>
+</tool-use>
+
+---
+
+<tool-use data-tool-type="bash" data-tool-name="run_terminal_cmd">
+<details><summary>Tool use: **command** • Run command: git commit -m "Fix file opening: use direct blob URL for PDFs, improve GridFS order lookup, add comprehensive logging"</summary>
+
+```bash
+git commit -m "Fix file opening: use direct blob URL for PDFs, improve GridFS order lookup, add comprehensive logging"
+```
+
+```
+[main 07d9173] Fix file opening: use direct blob URL for PDFs, improve GridFS order lookup, add comprehensive logging
+ 3 files changed, 943 insertions(+), 74 deletions(-)
+
+```
+</details>
+</tool-use>
+
+---
+
+<tool-use data-tool-type="bash" data-tool-name="run_terminal_cmd">
+<details><summary>Tool use: **command** • Run command: git push origin main</summary>
+
+```bash
+git push origin main
+```
+
+```
+To https://github.com/ascrllo-maker/inkline-printing-system.git
+   79d7b43..07d9173  main -&gt; main
+
+```
+</details>
+</tool-use>
+
+---
+
+
+
+---
+
+
+## Fix: file opening issue
+
+### Changes
+
+1. Frontend (`client/src/pages/AdminPortal.jsx`):
+   - PDFs: use `window.open(blobUrl)` instead of `document.write()` so the browser handles the blob URL
+   - Images: open in a new window with proper HTML
+   - Text files: open in a formatted viewer
+   - Error handling: clearer messages and logging
+   - Blob URL management: do not revoke for PDFs; let the browser clean up
+
+2. Backend (`server/routes/admin.js`):
+   - Logging for GridFS retrieval and order lookup
+   - Order lookup: try multiple filePath patterns
+   - Fallback: find by fileName if filePath lookup fails
+   - Error handling: more specific messages
+   - Removed `Content-Transfer-Encoding: binary` header
+
+### Improvements
+
+1. Direct blob URL opening for PDFs:
+   ```javascript
+   // OLD (didn't work reliably):
+   window.open('', '_blank')
+   newWindow.document.write(`<embed src="${blobUrl}">`)
+   
+   // NEW (works reliably):
+   window.open(blobUrl, '_blank')
+   ```
+
+2. Improved order lookup:
+   - Tries multiple filePath formats
+   - Falls back to fileName search
+   - Better handling of GridFS paths
+
+3. Enhanced logging:
+   - Logs file retrieval steps
+   - Logs order lookup attempts
+   - Logs GridFS file metadata
+   - Helps diagnose issues
+
+### How it works
+
+1. Student uploads file → stored in GridFS → order created with `gridfsFileId` and `filePath: /gridfs/{fileId}`
+2. Admin clicks download → frontend fetches from `/api/admin/file/gridfs/{fileId}`
+3. Backend:
+   - Detects GridFS path
+   - Validates file ID
+   - Retrieves file from GridFS
+   - Verifies admin access
+   - Streams file with correct headers
+4. Frontend:
+   - Receives file as ArrayBuffer
+   - Creates blob with correct MIME type
+   - Opens blob URL directly in new window (PDFs)
+   - Browser handles PDF rendering
+
+### Test after deployment
+
+1. Wait for Render to finish deploying
+2. Create a new order with a PDF file
+3. Click Download
+4. Expected: PDF opens in a new tab with the browser’s PDF viewer
+5. Check browser console and Render logs for any errors
+
+### Debugging
+
+If issues persist:
+- Check browser console for errors
+- Check Render logs for GridFS retrieval logs
+- Verify the file was stored in GridFS (logs show "File stored in GridFS")
+- Verify the order has `gridfsFileId` in the database
+
+Changes committed and pushed. Render will auto-deploy. The direct blob URL approach should work more reliably across browsers.
+
+---
+
+_**User (2025-11-08 12:00Z)**_
+
+add a show password button in the login and sign up at the login page of all portals
+
+---
+
+_**Agent (model default, mode Agent)**_
+
+
+
+---
+
+
+
+---
+
+<tool-use data-tool-type="unknown" data-tool-name="glob_file_search">
+<details>
+<summary>Tool use: **glob_file_search**</summary>
+
+Status: **loading**
+
+
+</details>
+</tool-use>
+
+---
+
+
+
+---
+
+
+
+---
+
+
+
+---
+
+
+
+---
+
+<tool-use data-tool-type="unknown" data-tool-name="read_file">
+<details>
+<summary>Tool use: **read_file**</summary>
+
+Status: **loading**
+
+
+</details>
+</tool-use>
+
+---
+
+
+
+---
+

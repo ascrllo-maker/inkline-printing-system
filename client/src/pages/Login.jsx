@@ -2,19 +2,21 @@ import { useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useAuth } from '../context/AuthContext';
 import { authAPI } from '../services/api';
-import { Printer, Lock, Mail, User, Upload } from 'lucide-react';
+import { Printer, Lock, Mail, User, Upload, Eye, EyeOff } from 'lucide-react';
 import toast from 'react-hot-toast';
 
 export default function Login() {
   const [isLogin, setIsLogin] = useState(true);
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
+  const [showPassword, setShowPassword] = useState(false);
   const [loading, setLoading] = useState(false);
 
   // Signup form state
   const [fullName, setFullName] = useState('');
   const [signupEmail, setSignupEmail] = useState('');
   const [signupPassword, setSignupPassword] = useState('');
+  const [showSignupPassword, setShowSignupPassword] = useState(false);
   const [isBSIT, setIsBSIT] = useState(false);
   const [idImage, setIdImage] = useState(null);
   const [signupLoading, setSignupLoading] = useState(false);
@@ -185,13 +187,25 @@ export default function Login() {
                 <div className="relative">
                   <Lock className="absolute left-3 top-1/2 transform -translate-y-1/2 text-white/80 w-5 h-5 z-10" />
                   <input
-                    type="password"
+                    type={showPassword ? "text" : "password"}
                     value={password}
                     onChange={(e) => setPassword(e.target.value)}
                     required
-                    className="glass-input w-full pl-10 pr-4 py-3 rounded-lg text-white placeholder-white/50 border border-white/20 backdrop-blur-md bg-white/10 focus:bg-white/15 transition-colors"
+                    className="glass-input w-full pl-10 pr-12 py-3 rounded-lg text-white placeholder-white/50 border border-white/20 backdrop-blur-md bg-white/10 focus:bg-white/15 transition-colors"
                     placeholder="Enter your password"
                   />
+                  <button
+                    type="button"
+                    onClick={() => setShowPassword(!showPassword)}
+                    className="absolute right-3 top-1/2 transform -translate-y-1/2 text-white/80 hover:text-white transition-colors focus:outline-none z-10"
+                    aria-label={showPassword ? "Hide password" : "Show password"}
+                  >
+                    {showPassword ? (
+                      <EyeOff className="w-5 h-5" />
+                    ) : (
+                      <Eye className="w-5 h-5" />
+                    )}
+                  </button>
                 </div>
               </div>
 
@@ -246,13 +260,25 @@ export default function Login() {
                 <div className="relative">
                   <Lock className="absolute left-3 top-1/2 transform -translate-y-1/2 text-white/80 w-5 h-5 z-10" />
                   <input
-                    type="password"
+                    type={showSignupPassword ? "text" : "password"}
                     value={signupPassword}
                     onChange={(e) => setSignupPassword(e.target.value)}
                     required
-                    className="glass-input w-full pl-10 pr-4 py-3 rounded-lg text-white placeholder-white/50 border border-white/20 backdrop-blur-md bg-white/10 focus:bg-white/15 transition-colors"
+                    className="glass-input w-full pl-10 pr-12 py-3 rounded-lg text-white placeholder-white/50 border border-white/20 backdrop-blur-md bg-white/10 focus:bg-white/15 transition-colors"
                     placeholder="Enter your password"
                   />
+                  <button
+                    type="button"
+                    onClick={() => setShowSignupPassword(!showSignupPassword)}
+                    className="absolute right-3 top-1/2 transform -translate-y-1/2 text-white/80 hover:text-white transition-colors focus:outline-none z-10"
+                    aria-label={showSignupPassword ? "Hide password" : "Show password"}
+                  >
+                    {showSignupPassword ? (
+                      <EyeOff className="w-5 h-5" />
+                    ) : (
+                      <Eye className="w-5 h-5" />
+                    )}
+                  </button>
                 </div>
               </div>
 

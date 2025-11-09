@@ -89,7 +89,7 @@ export default function AdminPortal({ shop }) {
     }
   };
 
-  // Handle file download
+  // Handle file download - opens file in new tab
   const handleDownloadFile = async (filePath, fileName) => {
     try {
       if (!filePath) {
@@ -115,7 +115,7 @@ export default function AdminPortal({ shop }) {
       });
 
       if (!response.ok) {
-        throw new Error('Failed to download file');
+        throw new Error('Failed to load file');
       }
 
       // Get the file as a blob
@@ -124,23 +124,37 @@ export default function AdminPortal({ shop }) {
       // Create a temporary URL for the blob
       const blobUrl = window.URL.createObjectURL(blob);
       
-      // Create a temporary anchor element to trigger download
-      const link = document.createElement('a');
-      link.href = blobUrl;
-      link.download = fileName || 'file';
-      document.body.appendChild(link);
+      // Open the file in a new tab
+      const newWindow = window.open(blobUrl, '_blank', 'noopener,noreferrer');
       
-      // Trigger the download
-      link.click();
+      // If popup was blocked, fall back to creating a link
+      if (!newWindow || newWindow.closed || typeof newWindow.closed === 'undefined') {
+        // Create a temporary anchor element to open in new tab
+        const link = document.createElement('a');
+        link.href = blobUrl;
+        link.target = '_blank';
+        link.rel = 'noopener noreferrer';
+        document.body.appendChild(link);
+        link.click();
+        document.body.removeChild(link);
+      }
       
-      // Clean up
-      document.body.removeChild(link);
-      window.URL.revokeObjectURL(blobUrl);
+      // Clean up the blob URL after a delay to allow the new tab to load
+      // Note: We wait 5 seconds to ensure the new tab has loaded the blob URL
+      // The browser will clean up blob URLs when tabs are closed, but we revoke
+      // to prevent memory leaks if many files are opened
+      setTimeout(() => {
+        try {
+          window.URL.revokeObjectURL(blobUrl);
+        } catch (e) {
+          // Ignore errors if URL was already revoked
+        }
+      }, 5000);
       
-      toast.success('File downloaded successfully');
+      toast.success('File opened in new tab');
     } catch (error) {
-      console.error('Error downloading file:', error);
-      toast.error('Failed to download file. Please try again.');
+      console.error('Error opening file:', error);
+      toast.error('Failed to open file. Please try again.');
     }
   };
 

@@ -868,17 +868,32 @@ router.get('/file/*', protect, async (req, res) => {
         // Determine content type
         const ext = path.extname(file.filename);
         let contentType = mime.lookup(ext) || file.metadata?.mimetype || 'application/octet-stream';
+        
+        // Ensure PDFs have the correct content type
+        if (ext.toLowerCase() === '.pdf' && contentType !== 'application/pdf') {
+          contentType = 'application/pdf';
+        }
 
-        // Set headers
+        console.log('Serving GridFS file:', {
+          fileId: fileId,
+          filename: file.filename,
+          originalName: file.metadata?.originalName,
+          contentType: contentType,
+          size: file.length,
+          metadata: file.metadata
+        });
+
+        // Set headers BEFORE piping
         res.setHeader('Content-Type', contentType);
         res.setHeader('Content-Disposition', `inline; filename="${encodeURIComponent(file.metadata?.originalName || file.filename)}"`);
-        res.setHeader('Content-Length', file.length);
+        res.setHeader('Content-Length', file.length.toString());
         res.setHeader('Cache-Control', 'private, max-age=3600');
         res.setHeader('X-Content-Type-Options', 'nosniff');
         res.setHeader('Accept-Ranges', 'bytes');
+        res.setHeader('Content-Transfer-Encoding', 'binary');
 
         // Stream file from GridFS
-        const downloadStream = gridFSBucket.openDownloadStream(file._id);
+        const downloadStream = gridFSBucket.openDownloadStream(new mongoose.Types.ObjectId(fileId));
         
         downloadStream.on('error', (error) => {
           console.error('Error streaming file from GridFS:', error);
@@ -888,7 +903,12 @@ router.get('/file/*', protect, async (req, res) => {
             res.end();
           }
         });
+        
+        downloadStream.on('end', () => {
+          console.log('GridFS file stream ended successfully');
+        });
 
+        // Pipe the stream to response
         downloadStream.pipe(res);
         return;
 
@@ -963,14 +983,29 @@ router.get('/file/*', protect, async (req, res) => {
           // Determine content type
           const ext = path.extname(gridfsFile.filename);
           let contentType = mime.lookup(ext) || gridfsFile.metadata?.mimetype || 'application/octet-stream';
+          
+          // Ensure PDFs have the correct content type
+          if (ext.toLowerCase() === '.pdf' && contentType !== 'application/pdf') {
+            contentType = 'application/pdf';
+          }
 
-          // Set headers
+          console.log('Serving GridFS file from order lookup:', {
+            fileId: order.gridfsFileId,
+            filename: gridfsFile.filename,
+            originalName: gridfsFile.metadata?.originalName,
+            contentType: contentType,
+            size: gridfsFile.length,
+            metadata: gridfsFile.metadata
+          });
+
+          // Set headers BEFORE piping
           res.setHeader('Content-Type', contentType);
           res.setHeader('Content-Disposition', `inline; filename="${encodeURIComponent(gridfsFile.metadata?.originalName || gridfsFile.filename)}"`);
-          res.setHeader('Content-Length', gridfsFile.length);
+          res.setHeader('Content-Length', gridfsFile.length.toString());
           res.setHeader('Cache-Control', 'private, max-age=3600');
           res.setHeader('X-Content-Type-Options', 'nosniff');
           res.setHeader('Accept-Ranges', 'bytes');
+          res.setHeader('Content-Transfer-Encoding', 'binary');
 
           // Stream file from GridFS
           const downloadStream = gridFSBucket.openDownloadStream(order.gridfsFileId);
@@ -983,7 +1018,12 @@ router.get('/file/*', protect, async (req, res) => {
               res.end();
             }
           });
+          
+          downloadStream.on('end', () => {
+            console.log('GridFS file stream ended successfully');
+          });
 
+          // Pipe the stream to response
           downloadStream.pipe(res);
           return;
         } catch (gridfsError) {

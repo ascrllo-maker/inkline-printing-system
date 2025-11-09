@@ -135,30 +135,22 @@ export default function AdminPortal({ shop }) {
         throw new Error(`Failed to load file: ${response.status} ${response.statusText}`);
       }
 
-      // Get the file as a blob
-      const blob = await response.blob();
-      
-      // Verify blob was created successfully
-      if (!blob || blob.size === 0) {
-        toast.dismiss(loadingToast);
-        throw new Error('File is empty or could not be loaded');
-      }
-      
-      // Get content type from response headers (preferred)
+      // Get content type from response headers first
       let contentType = response.headers.get('content-type');
+      const contentLength = response.headers.get('content-length');
       const contentDisposition = response.headers.get('content-disposition');
       
-      console.log('File loaded:', {
-        size: blob.size,
-        blobType: blob.type,
-        contentType: contentType,
-        contentDisposition: contentDisposition,
-        fileName: fileName
+      console.log('Response headers:', {
+        contentType,
+        contentLength,
+        contentDisposition,
+        status: response.status,
+        statusText: response.statusText
       });
       
       // If content-type is missing or generic, try to infer from file extension
       if (!contentType || contentType === 'application/octet-stream') {
-        const extension = fileName.split('.').pop()?.toLowerCase();
+        const extension = fileName ? fileName.split('.').pop()?.toLowerCase() : '';
         const mimeTypes = {
           'pdf': 'application/pdf',
           'doc': 'application/msword',
@@ -179,34 +171,50 @@ export default function AdminPortal({ shop }) {
           contentType = mimeTypes[extension];
           console.log('Inferred content type from extension:', contentType);
         } else {
-          contentType = blob.type || 'application/octet-stream';
+          contentType = 'application/octet-stream';
         }
       }
       
-      // Create a new blob with the correct MIME type
-      const typedBlob = new Blob([blob], { type: contentType });
+      // Read the response as an ArrayBuffer first to ensure complete download
+      const arrayBuffer = await response.arrayBuffer();
       
-      // Verify the typed blob
-      if (typedBlob.size !== blob.size) {
-        console.warn('Blob size mismatch:', typedBlob.size, 'vs', blob.size);
+      // Verify we got data
+      if (!arrayBuffer || arrayBuffer.byteLength === 0) {
+        toast.dismiss(loadingToast);
+        throw new Error('File is empty or could not be loaded');
+      }
+      
+      console.log('File loaded as ArrayBuffer:', {
+        size: arrayBuffer.byteLength,
+        contentType: contentType,
+        fileName: fileName
+      });
+      
+      // Create a blob with the correct MIME type
+      const blob = new Blob([arrayBuffer], { type: contentType });
+      
+      // Verify the blob
+      if (blob.size === 0) {
+        toast.dismiss(loadingToast);
+        throw new Error('Blob is empty after creation');
       }
       
       // Create blob URL
-      const blobUrl = URL.createObjectURL(typedBlob);
+      const blobUrl = URL.createObjectURL(blob);
       console.log('Blob URL created:', {
         url: blobUrl,
         type: contentType,
-        size: typedBlob.size
+        size: blob.size
       });
       
-      // For PDFs and images, try opening directly first
-      // For other file types, download them
+      // Determine file type
       const isPDF = contentType === 'application/pdf';
       const isImage = contentType.startsWith('image/');
       
       if (isPDF || isImage) {
-        // Open in new tab for PDFs and images
-        const newWindow = window.open(blobUrl, '_blank', 'noopener,noreferrer');
+        // For PDFs, use a more reliable method: create an iframe or object
+        // First, try opening in a new window with the blob URL
+        const newWindow = window.open('', '_blank', 'noopener,noreferrer');
         
         if (!newWindow) {
           toast.dismiss(loadingToast);
@@ -215,17 +223,48 @@ export default function AdminPortal({ shop }) {
           return;
         }
         
-        // Wait a bit to check if the window loaded successfully
-        setTimeout(() => {
-          try {
-            if (newWindow.closed) {
-              console.warn('Window was closed immediately');
-            }
-          } catch (e) {
-            // Can't access window if it's from a different origin
-            console.log('Cannot check window status (cross-origin)');
-          }
-        }, 1000);
+        // Write the PDF content to the new window
+        newWindow.document.write(`
+          <!DOCTYPE html>
+          <html>
+            <head>
+              <title>${fileName || 'Document'}</title>
+              <style>
+                body {
+                  margin: 0;
+                  padding: 0;
+                  overflow: hidden;
+                }
+                embed {
+                  width: 100%;
+                  height: 100vh;
+                  border: none;
+                }
+                iframe {
+                  width: 100%;
+                  height: 100vh;
+                  border: none;
+                }
+              </style>
+            </head>
+            <body>
+              <embed src="${blobUrl}" type="${contentType}" />
+              <iframe src="${blobUrl}" style="display: none;"></iframe>
+              <script>
+                // Fallback: if embed doesn't work, use iframe
+                setTimeout(function() {
+                  var embed = document.querySelector('embed');
+                  var iframe = document.querySelector('iframe');
+                  if (embed && embed.offsetHeight === 0) {
+                    embed.style.display = 'none';
+                    iframe.style.display = 'block';
+                  }
+                }, 100);
+              </script>
+            </body>
+          </html>
+        `);
+        newWindow.document.close();
         
         toast.dismiss(loadingToast);
         toast.success('File opened in new tab');
@@ -246,22 +285,6 @@ export default function AdminPortal({ shop }) {
         setTimeout(() => {
           URL.revokeObjectURL(blobUrl);
         }, 1000);
-      }
-      
-      // For PDFs and images, don't revoke the blob URL immediately
-      // The browser will clean it up when the tab is closed
-      // Store blob URLs in a Set to prevent memory leaks (optional cleanup after 5 minutes)
-      if (isPDF || isImage) {
-        // Optional: Clean up blob URLs after 5 minutes to prevent memory leaks
-        setTimeout(() => {
-          try {
-            // Don't revoke if the window might still be open
-            // The browser will handle cleanup
-            console.log('Blob URL cleanup timer expired (file should still be accessible)');
-          } catch (e) {
-            // Ignore errors
-          }
-        }, 300000); // 5 minutes
       }
       
     } catch (error) {

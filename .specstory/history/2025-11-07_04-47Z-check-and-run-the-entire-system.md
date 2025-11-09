@@ -48859,3 +48859,1416 @@ _**Agent (model default, mode Agent)**_
 
 ---
 
+
+Files aren't found because Render's filesystem is ephemeral; uploads are lost on redeploy/restart. Checking the upload configuration and Render logs to confirm the file location. Implementing a fix.
+
+
+---
+
+<tool-use data-tool-type="read" data-tool-name="read_file">
+<details><summary>Tool use: **read_file** • Read file: server/middleware/upload.js</summary>
+
+</details>
+</tool-use>
+
+---
+
+<tool-use data-tool-type="read" data-tool-name="read_file">
+<details><summary>Tool use: **read_file** • Read file: server/routes/admin.js</summary>
+
+</details>
+</tool-use>
+
+---
+
+<tool-use data-tool-type="search" data-tool-name="codebase_search">
+<details>
+                <summary>Tool use: **codebase_search** • Searched codebase "Where are files uploaded and stored on the server?" • **15** results</summary>
+            
+| File | Lines |
+|------|-------|
+| `server/middleware/upload.js` | L28 |
+| `server/middleware/upload.js` | L13-71 |
+| `server/middleware/upload.js` | L73-83 |
+| `server/index.js` | L30-72 |
+| `server/middleware/upload.js` | L51-83 |
+| `server/routes/order.js` | L8-231 |
+| `server/routes/order.js` | L231 |
+| `server/routes/auth.js` | L11-114 |
+| `server/models/Order.js` | L72 |
+| `server/models/User.js` | L62 |
+| `server/index.js` | L17 |
+| `server/index.js` | L92-137 |
+| `server/index.js` | L14-55 |
+| `server/middleware/upload.js` | L42-77 |
+| `server/index.js` | L58-72 |
+
+</details>
+</tool-use>
+
+---
+
+<tool-use data-tool-type="read" data-tool-name="read_file">
+<details><summary>Tool use: **read_file** • Read file: server/index.js</summary>
+
+</details>
+</tool-use>
+
+---
+
+
+
+---
+
+
+Render’s filesystem is ephemeral; files uploaded to disk are lost on redeploy/restart, while the database still references them. Implementing MongoDB GridFS for persistent file storage.
+
+
+---
+
+<tool-use data-tool-type="read" data-tool-name="read_file">
+<details><summary>Tool use: **read_file** • Read file: package.json</summary>
+
+</details>
+</tool-use>
+
+---
+
+<tool-use data-tool-type="bash" data-tool-name="run_terminal_cmd">
+<details><summary>Tool use: **command** • Run command: npm install multer-gridfs-storage gridfs-stream</summary>
+
+```bash
+npm install multer-gridfs-storage gridfs-stream
+```
+
+```
+npm error code ERESOLVE
+npm error ERESOLVE unable to resolve dependency tree
+npm error
+npm error While resolving: inkline-printing-queue@1.0.0
+npm error Found: multer@1.4.5-lts.2
+npm error node_modules/multer
+npm error   multer@&quot;^1.4.5-lts.1&quot; from the root project
+npm error
+npm error Could not resolve dependency:
+npm error peer multer@&quot;^1.4.2&quot; from multer-gridfs-storage@5.0.2
+npm error node_modules/multer-gridfs-storage
+npm error   multer-gridfs-storage@&quot;*&quot; from the root project
+npm error
+npm error Fix the upstream dependency conflict, or retry
+npm error this command with --force or --legacy-peer-deps
+npm error to accept an incorrect (and potentially broken) dependency resolution.
+npm error
+npm error
+npm error For a full report see:
+npm error C:\Users\airlc\AppData\Local\npm-cache\_logs\2025-11-09T06_14_24_974Z-eresolve-report.txt
+npm error A complete log of this run can be found in: C:\Users\airlc\AppData\Local\npm-cache\_logs\2025-11-09T06_14_24_974Z-debug-0.log
+
+```
+</details>
+</tool-use>
+
+---
+
+<tool-use data-tool-type="read" data-tool-name="read_file">
+<details><summary>Tool use: **read_file** • Read file: server/index.js</summary>
+
+</details>
+</tool-use>
+
+---
+
+<tool-use data-tool-type="search" data-tool-name="codebase_search">
+<details>
+                <summary>Tool use: **codebase_search** • Searched codebase "How is MongoDB connection established and where is the mongoose connection used?" • **15** results</summary>
+            
+| File | Lines |
+|------|-------|
+| `server/index.js` | L58-72 |
+| `server/scripts/dbAdmin.js` | L5-51 |
+| `server/index.js` | L17 |
+| `server/scripts/seedUsers.js` | L1-85 |
+| `server/index.js` | L14-55 |
+| `server/scripts/dbAdmin.js` | L18 |
+| `server/scripts/dbAdmin.js` | L103-172 |
+| `server/index.js` | L58-119 |
+| `server/models/User.js` | L62 |
+| `server/scripts/seedUsers.js` | L85 |
+| `server/index.js` | L124-142 |
+| `server/models/Order.js` | L72 |
+| `server/middleware/auth.js` | L44 |
+| `server/index.js` | L92-119 |
+| `server/models/User.js` | L49-66 |
+
+</details>
+</tool-use>
+
+---
+
+
+
+---
+
+
+Render’s filesystem is ephemeral; files are lost on redeploy/restart. Implementing MongoDB GridFS to persist files in the database.
+
+
+---
+
+<tool-use data-tool-type="bash" data-tool-name="run_terminal_cmd">
+<details><summary>Tool use: **command** • Run command: npm install gridfs-stream --legacy-peer-deps</summary>
+
+```bash
+npm install gridfs-stream --legacy-peer-deps
+```
+
+```
+npm warn deprecated gridfs-stream@1.1.1: This project has been sunset. Please migrate to an alternative.
+
+added 2 packages, and audited 218 packages in 6s
+
+29 packages are looking for funding
+  run &#96;npm fund&#96; for details
+
+4 vulnerabilities (1 moderate, 3 high)
+
+To address all issues (including breaking changes), run:
+  npm audit fix --force
+
+Run &#96;npm audit&#96; for details.
+
+```
+</details>
+</tool-use>
+
+---
+
+
+
+---
+
+
+Using Mongoose's built-in GridFS support. Creating a utility for GridFS storage and updating the upload and file-serving logic:
+
+
+---
+
+<tool-use data-tool-type="write" data-tool-name="write">
+
+<details><summary>Tool use: **code_edit** • Edit file: server/utils/gridfs.js</summary>
+
+**Chunk 1**
+Lines added: 123, lines removed: 1
+
+```diff
+@@ -1,1 +1,123 @@
+- 
++ import mongoose from &#39;mongoose&#39;;
++ import { GridFSBucket } from &#39;mongodb&#39;;
++ 
++ let gfs;
++ 
++ // Initialize GridFS
++ export const initGridFS = () =&gt; {
++   if (mongoose.connection.readyState === 1) {
++     gfs = new GridFSBucket(mongoose.connection.db, {
++       bucketName: &#39;uploads&#39;
++     });
++     console.log(&#39;✅ GridFS initialized&#39;);
++   }
++ };
++ 
++ // Initialize when MongoDB connects
++ mongoose.connection.on(&#39;connected&#39;, () =&gt; {
++   initGridFS();
++ });
++ 
++ // Get GridFS instance
++ export const getGridFS = () =&gt; {
++   if (!gfs &amp;&amp; mongoose.connection.readyState === 1) {
++     initGridFS();
++   }
++   return gfs;
++ };
++ 
++ // Upload file to GridFS
++ export const uploadToGridFS = (fileBuffer, filename, metadata = {}) =&gt; {
++   return new Promise((resolve, reject) =&gt; {
++     const gfs = getGridFS();
++     if (!gfs) {
++       return reject(new Error(&#39;GridFS not initialized&#39;));
++     }
++ 
++     const uploadStream = gfs.openUploadStream(filename, {
++       metadata: metadata
++     });
++ 
++     uploadStream.on(&#39;finish&#39;, () =&gt; {
++       resolve(uploadStream.id);
++     });
++ 
++     uploadStream.on(&#39;error&#39;, (error) =&gt; {
++       reject(error);
++     });
++ 
++     uploadStream.end(fileBuffer);
++   });
++ };
++ 
++ // Download file from GridFS
++ export const downloadFromGridFS = (fileId) =&gt; {
++   return new Promise((resolve, reject) =&gt; {
++     const gfs = getGridFS();
++     if (!gfs) {
++       return reject(new Error(&#39;GridFS not initialized&#39;));
++     }
++ 
++     const downloadStream = gfs.openDownloadStream(fileId);
++     const chunks = [];
++ 
++     downloadStream.on(&#39;data&#39;, (chunk) =&gt; {
++       chunks.push(chunk);
++     });
++ 
++     downloadStream.on(&#39;end&#39;, () =&gt; {
++       resolve(Buffer.concat(chunks));
++     });
++ 
++     downloadStream.on(&#39;error&#39;, (error) =&gt; {
++       reject(error);
++     });
++   });
++ };
++ 
++ // Get file info from GridFS
++ export const getFileInfo = (fileId) =&gt; {
++   return new Promise((resolve, reject) =&gt; {
++     const gfs = getGridFS();
++     if (!gfs) {
++       return reject(new Error(&#39;GridFS not initialized&#39;));
++     }
++ 
++     gfs.find({ _id: fileId }).toArray((err, files) =&gt; {
++       if (err) {
++         return reject(err);
++       }
++       if (files.length === 0) {
++         return reject(new Error(&#39;File not found&#39;));
++       }
++       resolve(files[0]);
++     });
++   });
++ };
++ 
++ // Delete file from GridFS
++ export const deleteFromGridFS = (fileId) =&gt; {
++   return new Promise((resolve, reject) =&gt; {
++     const gfs = getGridFS();
++     if (!gfs) {
++       return reject(new Error(&#39;GridFS not initialized&#39;));
++     }
++ 
++     gfs.delete(fileId, (err) =&gt; {
++       if (err) {
++         return reject(err);
++       }
++       resolve();
++     });
++   });
++ };
++ 
++ // Create read stream from GridFS
++ export const createReadStream = (fileId) =&gt; {
++   const gfs = getGridFS();
++   if (!gfs) {
++     throw new Error(&#39;GridFS not initialized&#39;);
++   }
++   return gfs.openDownloadStream(fileId);
++ };
++ 
+```
+
+</details>
+
+</tool-use>
+
+---
+
+<tool-use data-tool-type="read" data-tool-name="read_file">
+<details><summary>Tool use: **read_file** • Read file: server/middleware/upload.js</summary>
+
+</details>
+</tool-use>
+
+---
+
+<tool-use data-tool-type="read" data-tool-name="read_file">
+<details><summary>Tool use: **read_file** • Read file: server/routes/order.js</summary>
+
+</details>
+</tool-use>
+
+---
+
+
+
+---
+
+
+Updating the upload middleware to use GridFS and modifying the file serving endpoint:
+
+
+---
+
+<tool-use data-tool-type="write" data-tool-name="search_replace">
+
+<details><summary>Tool use: **code_edit** • Edit file: server/middleware/upload.js</summary>
+
+**Chunk 1**
+Lines added: 3, lines removed: 1
+
+```diff
+@@ -3,9 +3,11 @@
+  import { fileURLToPath } from &#39;url&#39;;
+  import fs from &#39;fs&#39;;
++ import mongoose from &#39;mongoose&#39;;
++ import { GridFSBucket } from &#39;mongodb&#39;;
+  
+  const __filename = fileURLToPath(import.meta.url);
+  const __dirname = path.dirname(__filename);
+  
+- // Create uploads directories if they don&#39;t exist
++ // Create uploads directories if they don&#39;t exist (for local storage fallback)
+  const uploadsDir = path.join(__dirname, &#39;../../uploads&#39;);
+  const idsDir = path.join(uploadsDir, &#39;ids&#39;);
+```
+
+**Chunk 2**
+Lines added: 15, lines removed: 20
+
+```diff
+@@ -18,25 +20,20 @@
+  });
+  
+- // Storage configuration for ID images
+- const idStorage = multer.diskStorage({
+-   destination: (req, file, cb) =&gt; {
+-     cb(null, idsDir);
+-   },
+-   filename: (req, file, cb) =&gt; {
+-     const uniqueSuffix = Date.now() + &#39;-&#39; + Math.round(Math.random() * 1E9);
+-     cb(null, &#39;id-&#39; + uniqueSuffix + path.extname(file.originalname));
+-   }
+- });
++ // Get GridFS bucket
++ const getGridFSBucket = () =&gt; {
++   if (mongoose.connection.readyState === 1) {
++     return new GridFSBucket(mongoose.connection.db, { bucketName: &#39;uploads&#39; });
++   }
++   return null;
++ };
++ 
++ // Memory storage for GridFS (stores file in memory, then uploads to GridFS)
++ const memoryStorage = multer.memoryStorage();
+  
+- // Storage configuration for print files
+- const fileStorage = multer.diskStorage({
+-   destination: (req, file, cb) =&gt; {
+-     cb(null, filesDir);
+-   },
+-   filename: (req, file, cb) =&gt; {
+-     const uniqueSuffix = Date.now() + &#39;-&#39; + Math.round(Math.random() * 1E9);
+-     cb(null, &#39;file-&#39; + uniqueSuffix + path.extname(file.originalname));
+-   }
+- });
++ // Storage configuration for ID images - use memory storage for GridFS
++ const idStorage = memoryStorage;
++ 
++ // Storage configuration for print files - use memory storage for GridFS
++ const fileStorage = memoryStorage;
+  
+  // File filter for images (ID verification)
+```
+
+</details>
+
+</tool-use>
+
+---
+
+<tool-use data-tool-type="read" data-tool-name="read_file">
+<details><summary>Tool use: **read_file** • Read file: server/models/Order.js</summary>
+
+</details>
+</tool-use>
+
+---
+
+<tool-use data-tool-type="write" data-tool-name="search_replace">
+
+<details><summary>Tool use: **code_edit** • Edit file: server/models/Order.js</summary>
+
+**Chunk 1**
+Lines added: 4, lines removed: undefined
+
+```diff
+@@ -33,4 +33,8 @@
+      required: true
+    },
++   gridfsFileId: {
++     type: mongoose.Schema.Types.ObjectId,
++     required: false
++   },
+    paperSize: {
+      type: String,
+```
+
+</details>
+
+</tool-use>
+
+---
+
+<tool-use data-tool-type="read" data-tool-name="read_file">
+<details><summary>Tool use: **read_file** • Read file: server/routes/order.js</summary>
+
+</details>
+</tool-use>
+
+---
+
+<tool-use data-tool-type="write" data-tool-name="search_replace">
+
+<details><summary>Tool use: **code_edit** • Edit file: server/routes/order.js</summary>
+
+**Chunk 1**
+Lines added: 2, lines removed: undefined
+
+```diff
+@@ -7,4 +7,6 @@
+  import { uploadFile } from &#39;../middleware/upload.js&#39;;
+  import { generateOrderNumber } from &#39;../utils/helpers.js&#39;;
++ import mongoose from &#39;mongoose&#39;;
++ import { GridFSBucket } from &#39;mongodb&#39;;
+  import { sendOrderCreatedEmail } from &#39;../utils/email.js&#39;;
+  
+```
+
+</details>
+
+</tool-use>
+
+---
+
+<tool-use data-tool-type="write" data-tool-name="search_replace">
+
+<details><summary>Tool use: **code_edit** • Edit file: server/routes/order.js</summary>
+
+**Chunk 1**
+Lines added: 55, lines removed: undefined
+
+```diff
+@@ -79,4 +79,59 @@
+        status: &#39;In Queue&#39;
+      });
++ 
++     // Store file in GridFS if MongoDB is connected
++     let gridfsFileId = null;
++     let filePath = &#96;/uploads/files/${req.file.originalname}&#96;;
++     
++     if (mongoose.connection.readyState === 1 &amp;&amp; req.file.buffer) {
++       try {
++         const gridFSBucket = new GridFSBucket(mongoose.connection.db, { bucketName: &#39;uploads&#39; });
++         const uniqueSuffix = Date.now() + &#39;-&#39; + Math.round(Math.random() * 1E9);
++         const filename = &#96;file-${uniqueSuffix}${path.extname(req.file.originalname)}&#96;;
++         
++         const uploadStream = gridFSBucket.openUploadStream(filename, {
++           metadata: {
++             originalName: req.file.originalname,
++             mimetype: req.file.mimetype,
++             uploadedBy: req.user._id.toString()
++           }
++         });
++         
++         uploadStream.end(req.file.buffer);
++         
++         await new Promise((resolve, reject) =&gt; {
++           uploadStream.on(&#39;finish&#39;, () =&gt; {
++             gridfsFileId = uploadStream.id;
++             filePath = &#96;/gridfs/${gridfsFileId}&#96;;
++             console.log(&#39;File stored in GridFS:&#39;, gridfsFileId, filename);
++             resolve();
++           });
++           uploadStream.on(&#39;error&#39;, reject);
++         });
++       } catch (gridfsError) {
++         console.error(&#39;Error storing file in GridFS, falling back to local storage:&#39;, gridfsError);
++         // Fall back to local file storage if GridFS fails
++         // File is already in memory, we need to save it to disk
++         const fs = await import(&#39;fs&#39;);
++         const path = await import(&#39;path&#39;);
++         const fileURLToPath = (await import(&#39;url&#39;)).fileURLToPath;
++         const __filename = fileURLToPath(import.meta.url);
++         const __dirname = path.dirname(__filename);
++         const filesDir = path.join(__dirname, &#39;../../uploads/files&#39;);
++         const uniqueSuffix = Date.now() + &#39;-&#39; + Math.round(Math.random() * 1E9);
++         const filename = &#96;file-${uniqueSuffix}${path.extname(req.file.originalname)}&#96;;
++         const filePath_local = path.join(filesDir, filename);
++         
++         if (!fs.existsSync(filesDir)) {
++           fs.mkdirSync(filesDir, { recursive: true });
++         }
++         
++         fs.writeFileSync(filePath_local, req.file.buffer);
++         filePath = &#96;/uploads/files/${filename}&#96;;
++       }
++     } else if (req.file.path) {
++       // File was saved to disk (fallback)
++       filePath = &#96;/uploads/files/${req.file.filename}&#96;;
++     }
+  
+      // Create order
+```
+
+**Chunk 2**
+Lines added: 2, lines removed: 1
+
+```diff
+@@ -87,5 +142,6 @@
+        shop,
+        fileName: req.file.originalname,
+-       filePath: &#96;/uploads/files/${req.file.filename}&#96;,
++       filePath: filePath,
++       gridfsFileId: gridfsFileId,
+        paperSize,
+        orientation,
+```
+
+</details>
+
+</tool-use>
+
+---
+
+<tool-use data-tool-type="read" data-tool-name="read_file">
+<details><summary>Tool use: **read_file** • Read file: server/routes/order.js</summary>
+
+</details>
+</tool-use>
+
+---
+
+<tool-use data-tool-type="grep" data-tool-name="grep">
+<details>
+<summary>Tool use: **grep** • Grep for "import.*path" in "server/routes/order.js" • 1 match</summary>
+
+Output mode: content
+
+
+| File | Content | Line |
+|------|------|------|
+| `server/routes/order.js` | `const path = await import('path');` | L116 |
+
+
+</details>
+</tool-use>
+
+---
+
+Model supplied an ambiguous edit
+
+---
+
+<tool-use data-tool-type="read" data-tool-name="read_file">
+<details><summary>Tool use: **read_file** • Read file: server/routes/admin.js</summary>
+
+</details>
+</tool-use>
+
+---
+
+<tool-use data-tool-type="write" data-tool-name="search_replace">
+
+<details><summary>Tool use: **code_edit** • Edit file: server/routes/admin.js</summary>
+
+**Chunk 1**
+Lines added: 66, lines removed: undefined
+
+```diff
+@@ -832,4 +832,70 @@
+      }
+  
++     // Check if this is a GridFS file path
++     if (filePath.startsWith(&#39;gridfs/&#39;)) {
++       const fileId = filePath.replace(&#39;gridfs/&#39;, &#39;&#39;);
++       
++       // Validate ObjectId
++       if (!mongoose.Types.ObjectId.isValid(fileId)) {
++         return res.status(400).json({ message: &#39;Invalid file ID&#39; });
++       }
++ 
++       try {
++         const gridFSBucket = new GridFSBucket(mongoose.connection.db, { bucketName: &#39;uploads&#39; });
++         
++         // Find file metadata
++         const files = await gridFSBucket.find({ _id: new mongoose.Types.ObjectId(fileId) }).toArray();
++         
++         if (files.length === 0) {
++           return res.status(404).json({ message: &#39;File not found in GridFS&#39; });
++         }
++ 
++         const file = files[0];
++         
++         // Verify admin access if it&#39;s an order file
++         const order = await Order.findOne({ gridfsFileId: file._id });
++         if (order) {
++           if (order.shop === &#39;IT&#39; &amp;&amp; req.user.role !== &#39;it_admin&#39;) {
++             return res.status(403).json({ message: &#39;Access denied: IT admin required&#39; });
++           }
++           if (order.shop === &#39;SSC&#39; &amp;&amp; req.user.role !== &#39;ssc_admin&#39;) {
++             return res.status(403).json({ message: &#39;Access denied: SSC admin required&#39; });
++           }
++         }
++ 
++         // Determine content type
++         const ext = path.extname(file.filename);
++         let contentType = mime.lookup(ext) || file.metadata?.mimetype || &#39;application/octet-stream&#39;;
++ 
++         // Set headers
++         res.setHeader(&#39;Content-Type&#39;, contentType);
++         res.setHeader(&#39;Content-Disposition&#39;, &#96;inline; filename=&quot;${encodeURIComponent(file.metadata?.originalName || file.filename)}&quot;&#96;);
++         res.setHeader(&#39;Content-Length&#39;, file.length);
++         res.setHeader(&#39;Cache-Control&#39;, &#39;private, max-age=3600&#39;);
++         res.setHeader(&#39;X-Content-Type-Options&#39;, &#39;nosniff&#39;);
++         res.setHeader(&#39;Accept-Ranges&#39;, &#39;bytes&#39;);
++ 
++         // Stream file from GridFS
++         const downloadStream = gridFSBucket.openDownloadStream(file._id);
++         
++         downloadStream.on(&#39;error&#39;, (error) =&gt; {
++           console.error(&#39;Error streaming file from GridFS:&#39;, error);
++           if (!res.headersSent) {
++             res.status(500).json({ message: &#39;Error reading file&#39;, error: error.message });
++           } else {
++             res.end();
++           }
++         });
++ 
++         downloadStream.pipe(res);
++         return;
++ 
++       } catch (gridfsError) {
++         console.error(&#39;Error retrieving file from GridFS:&#39;, gridfsError);
++         return res.status(500).json({ message: &#39;Error retrieving file from GridFS&#39;, error: gridfsError.message });
++       }
++     }
++ 
++     // Handle legacy file system paths
+      // Extract shop from file path to verify admin access
+      // File paths are like: uploads/files/filename or uploads/ids/filename (no leading slash)
+```
+
+**Chunk 2**
+Lines added: 1, lines removed: 1
+
+```diff
+@@ -839,5 +905,5 @@
+      if (pathParts.length &lt; 2 || pathParts[0] !== &#39;uploads&#39;) {
+        console.error(&#39;Invalid file path format:&#39;, filePath);
+-       return res.status(400).json({ message: &#39;Invalid file path format. Expected: uploads/files/filename&#39; });
++       return res.status(400).json({ message: &#39;Invalid file path format. Expected: uploads/files/filename or gridfs/fileId&#39; });
+      }
+  
+```
+
+**Chunk 3**
+Lines added: 18, lines removed: 1
+
+```diff
+@@ -864,6 +930,23 @@
+      // Check if file exists
+      if (!fs.existsSync(normalizedPath)) {
+-       console.error(&#39;File not found:&#39;, normalizedPath);
++       console.error(&#39;File not found on filesystem:&#39;, normalizedPath);
+        console.error(&#39;Uploads directory exists:&#39;, fs.existsSync(uploadsDir));
++       
++       // Try to find the file in GridFS as fallback
++       const fileName = pathParts[pathParts.length - 1];
++       const order = await Order.findOne({ 
++         $or: [
++           { filePath: &#96;/uploads/files/${fileName}&#96; },
++           { filePath: &#96;uploads/files/${fileName}&#96; },
++           { filePath: filePath }
++         ]
++       });
++       
++       if (order &amp;&amp; order.gridfsFileId) {
++         console.log(&#39;Found order with GridFS file ID, redirecting to GridFS:&#39;, order.gridfsFileId);
++         // Redirect to GridFS endpoint
++         return res.redirect(&#96;/api/admin/file/gridfs/${order.gridfsFileId}&#96;);
++       }
++       
+        if (fs.existsSync(uploadsDir)) {
+          // List files in the directory for debugging
+```
+
+**Chunk 4**
+Lines added: 2, lines removed: 1
+
+```diff
+@@ -877,5 +960,6 @@
+          message: &#39;File not found&#39;,
+          requestedPath: filePath,
+-         fullPath: normalizedPath
++         fullPath: normalizedPath,
++         note: &#39;File may have been lost due to server restart (Render uses ephemeral filesystem)&#39;
+        });
+      }
+```
+
+</details>
+
+</tool-use>
+
+---
+
+<tool-use data-tool-type="read" data-tool-name="read_file">
+<details><summary>Tool use: **read_file** • Read file: server/routes/admin.js</summary>
+
+</details>
+</tool-use>
+
+---
+
+<tool-use data-tool-type="write" data-tool-name="search_replace">
+
+<details><summary>Tool use: **code_edit** • Edit file: server/routes/admin.js</summary>
+
+**Chunk 1**
+Lines added: 2, lines removed: undefined
+
+```diff
+@@ -11,4 +11,6 @@
+  import fs from &#39;fs&#39;;
+  import mime from &#39;mime-types&#39;;
++ import mongoose from &#39;mongoose&#39;;
++ import { GridFSBucket } from &#39;mongodb&#39;;
+  
+  const router = express.Router();
+```
+
+</details>
+
+</tool-use>
+
+---
+
+<tool-use data-tool-type="generic" data-tool-name="read_lints">
+<details>
+          <summary>Tool use: **read_lints** • Read lints for 3 files</summary>
+      
+Lint paths:
+
+- `server/routes/order.js`
+- `server/routes/admin.js`
+- `server/models/Order.js`
+
+Lint results
+
+
+**No lint errors found**
+</details>
+</tool-use>
+
+---
+
+
+
+---
+
+
+Fixing the import issue and updating the file serving logic:
+
+
+---
+
+<tool-use data-tool-type="read" data-tool-name="read_file">
+<details><summary>Tool use: **read_file** • Read file: server/routes/order.js</summary>
+
+</details>
+</tool-use>
+
+---
+
+<tool-use data-tool-type="write" data-tool-name="search_replace">
+
+<details><summary>Tool use: **code_edit** • Edit file: server/routes/order.js</summary>
+
+**Chunk 1**
+Lines added: 6, lines removed: undefined
+
+```diff
+@@ -10,4 +10,10 @@
+  import { GridFSBucket } from &#39;mongodb&#39;;
+  import { sendOrderCreatedEmail } from &#39;../utils/email.js&#39;;
++ import path from &#39;path&#39;;
++ import fs from &#39;fs&#39;;
++ import { fileURLToPath } from &#39;url&#39;;
++ 
++ const __filename = fileURLToPath(import.meta.url);
++ const __dirname = path.dirname(__filename);
+  
+  const router = express.Router();
+```
+
+</details>
+
+</tool-use>
+
+---
+
+<tool-use data-tool-type="write" data-tool-name="search_replace">
+
+<details><summary>Tool use: **code_edit** • Edit file: server/routes/order.js</summary>
+
+**Chunk 1**
+Lines added: undefined, lines removed: 5
+
+```diff
+@@ -119,9 +119,4 @@
+          // Fall back to local file storage if GridFS fails
+          // File is already in memory, we need to save it to disk
+-         const fs = await import(&#39;fs&#39;);
+-         const path = await import(&#39;path&#39;);
+-         const fileURLToPath = (await import(&#39;url&#39;)).fileURLToPath;
+-         const __filename = fileURLToPath(import.meta.url);
+-         const __dirname = path.dirname(__filename);
+          const filesDir = path.join(__dirname, &#39;../../uploads/files&#39;);
+          const uniqueSuffix = Date.now() + &#39;-&#39; + Math.round(Math.random() * 1E9);
+```
+
+</details>
+
+</tool-use>
+
+---
+
+<tool-use data-tool-type="read" data-tool-name="read_file">
+<details><summary>Tool use: **read_file** • Read file: server/routes/admin.js</summary>
+
+</details>
+</tool-use>
+
+---
+
+Model supplied an ambiguous edit
+
+---
+
+<tool-use data-tool-type="read" data-tool-name="read_file">
+<details><summary>Tool use: **read_file** • Read file: server/routes/admin.js</summary>
+
+</details>
+</tool-use>
+
+---
+
+<tool-use data-tool-type="write" data-tool-name="search_replace">
+
+<details><summary>Tool use: **code_edit** • Edit file: server/routes/admin.js</summary>
+
+**Chunk 1**
+Lines added: 1, lines removed: 1
+
+```diff
+@@ -853,5 +853,5 @@
+          }
+  
+-         const file = files[0];
++         const gridfsFile = files[0];
+          
+          // Verify admin access if it&#39;s an order file
+```
+
+**Chunk 2**
+Lines added: 2, lines removed: undefined
+
+```diff
+@@ -865,4 +865,6 @@
+            }
+          }
++         
++         const file = gridfsFile;
+  
+          // Determine content type
+```
+
+</details>
+
+</tool-use>
+
+---
+
+<tool-use data-tool-type="write" data-tool-name="search_replace">
+
+<details><summary>Tool use: **code_edit** • Edit file: server/routes/admin.js</summary>
+
+**Chunk 1**
+Lines added: 1, lines removed: 1
+
+```diff
+@@ -853,5 +853,5 @@
+          }
+  
+-         const gridfsFile = files[0];
++         const file = files[0];
+          
+          // Verify admin access if it&#39;s an order file
+```
+
+**Chunk 2**
+Lines added: undefined, lines removed: 2
+
+```diff
+@@ -865,6 +865,4 @@
+            }
+          }
+-         
+-         const file = gridfsFile;
+  
+          // Determine content type
+```
+
+</details>
+
+</tool-use>
+
+---
+
+The string to replace was not found in the file.
+
+---
+
+<tool-use data-tool-type="generic" data-tool-name="read_lints">
+<details>
+          <summary>Tool use: **read_lints** • Read lints for 2 files</summary>
+      
+Lint paths:
+
+- `server/routes/order.js`
+- `server/routes/admin.js`
+
+Lint results
+
+
+**No lint errors found**
+</details>
+</tool-use>
+
+---
+
+<tool-use data-tool-type="read" data-tool-name="read_file">
+<details><summary>Tool use: **read_file** • Read file: server/routes/admin.js</summary>
+
+</details>
+</tool-use>
+
+---
+
+
+
+---
+
+
+Fixing the GridFS fallback to serve the file directly instead of redirecting:
+
+
+---
+
+<tool-use data-tool-type="write" data-tool-name="search_replace">
+
+<details><summary>Tool use: **code_edit** • Edit file: server/routes/admin.js</summary>
+
+**Chunk 1**
+Lines added: 45, lines removed: 3
+
+```diff
+@@ -946,7 +946,49 @@
+        
+        if (order &amp;&amp; order.gridfsFileId) {
+-         console.log(&#39;Found order with GridFS file ID, redirecting to GridFS:&#39;, order.gridfsFileId);
+-         // Redirect to GridFS endpoint
+-         return res.redirect(&#96;/api/admin/file/gridfs/${order.gridfsFileId}&#96;);
++         console.log(&#39;Found order with GridFS file ID, serving from GridFS:&#39;, order.gridfsFileId);
++         
++         try {
++           const gridFSBucket = new GridFSBucket(mongoose.connection.db, { bucketName: &#39;uploads&#39; });
++           
++           // Find file metadata
++           const gridfsFiles = await gridFSBucket.find({ _id: order.gridfsFileId }).toArray();
++           
++           if (gridfsFiles.length === 0) {
++             console.error(&#39;File not found in GridFS:&#39;, order.gridfsFileId);
++             return res.status(404).json({ message: &#39;File not found in GridFS&#39; });
++           }
++ 
++           const gridfsFile = gridfsFiles[0];
++           
++           // Determine content type
++           const ext = path.extname(gridfsFile.filename);
++           let contentType = mime.lookup(ext) || gridfsFile.metadata?.mimetype || &#39;application/octet-stream&#39;;
++ 
++           // Set headers
++           res.setHeader(&#39;Content-Type&#39;, contentType);
++           res.setHeader(&#39;Content-Disposition&#39;, &#96;inline; filename=&quot;${encodeURIComponent(gridfsFile.metadata?.originalName || gridfsFile.filename)}&quot;&#96;);
++           res.setHeader(&#39;Content-Length&#39;, gridfsFile.length);
++           res.setHeader(&#39;Cache-Control&#39;, &#39;private, max-age=3600&#39;);
++           res.setHeader(&#39;X-Content-Type-Options&#39;, &#39;nosniff&#39;);
++           res.setHeader(&#39;Accept-Ranges&#39;, &#39;bytes&#39;);
++ 
++           // Stream file from GridFS
++           const downloadStream = gridFSBucket.openDownloadStream(order.gridfsFileId);
++           
++           downloadStream.on(&#39;error&#39;, (error) =&gt; {
++             console.error(&#39;Error streaming file from GridFS:&#39;, error);
++             if (!res.headersSent) {
++               res.status(500).json({ message: &#39;Error reading file&#39;, error: error.message });
++             } else {
++               res.end();
++             }
++           });
++ 
++           downloadStream.pipe(res);
++           return;
++         } catch (gridfsError) {
++           console.error(&#39;Error retrieving file from GridFS:&#39;, gridfsError);
++           return res.status(500).json({ message: &#39;Error retrieving file from GridFS&#39;, error: gridfsError.message });
++         }
+        }
+        
+```
+
+</details>
+
+</tool-use>
+
+---
+
+<tool-use data-tool-type="read" data-tool-name="read_file">
+<details><summary>Tool use: **read_file** • Read file: client/src/pages/AdminPortal.jsx</summary>
+
+</details>
+</tool-use>
+
+---
+
+<tool-use data-tool-type="read" data-tool-name="read_file">
+<details><summary>Tool use: **read_file** • Read file: server/routes/admin.js</summary>
+
+</details>
+</tool-use>
+
+---
+
+<tool-use data-tool-type="generic" data-tool-name="read_lints">
+<details>
+          <summary>Tool use: **read_lints** • Read lints for 2 files</summary>
+      
+Lint paths:
+
+- `server/routes/admin.js`
+- `server/routes/order.js`
+
+Lint results
+
+
+**No lint errors found**
+</details>
+</tool-use>
+
+---
+
+<tool-use data-tool-type="bash" data-tool-name="run_terminal_cmd">
+<details><summary>Tool use: **command** • Run command: git add -A</summary>
+
+```bash
+git add -A
+```
+</details>
+</tool-use>
+
+---
+
+<tool-use data-tool-type="bash" data-tool-name="run_terminal_cmd">
+<details><summary>Tool use: **command** • Run command: git commit -m "Implement MongoDB GridFS for persistent file storage on Render"</summary>
+
+```bash
+git commit -m "Implement MongoDB GridFS for persistent file storage on Render"
+```
+
+```
+[main db5ccb1] Implement MongoDB GridFS for persistent file storage on Render
+ 8 files changed, 2034 insertions(+), 24 deletions(-)
+ create mode 100644 server/utils/gridfs.js
+
+```
+</details>
+</tool-use>
+
+---
+
+<tool-use data-tool-type="bash" data-tool-name="run_terminal_cmd">
+<details><summary>Tool use: **command** • Run command: git push origin main</summary>
+
+```bash
+git push origin main
+```
+
+```
+To https://github.com/ascrllo-maker/inkline-printing-system.git
+   6c44a3b..db5ccb1  main -&gt; main
+
+```
+</details>
+</tool-use>
+
+---
+
+
+
+---
+
+
+Updating the frontend to handle GridFS file paths and improving error handling:
+
+
+---
+
+<tool-use data-tool-type="read" data-tool-name="read_file">
+<details><summary>Tool use: **read_file** • Read file: client/src/pages/AdminPortal.jsx</summary>
+
+</details>
+</tool-use>
+
+---
+
+<tool-use data-tool-type="write" data-tool-name="search_replace">
+
+<details><summary>Tool use: **code_edit** • Edit file: client/src/pages/AdminPortal.jsx</summary>
+
+**Chunk 1**
+Lines added: 7, lines removed: 2
+
+```diff
+@@ -110,7 +110,12 @@
+  
+        // Construct the authenticated file URL
+-       // File path is like: /uploads/files/filename
++       // File path can be:
++       // - /uploads/files/filename (legacy filesystem path)
++       // - /gridfs/fileId (GridFS path)
+        // Remove leading slash for the API endpoint
+-       const cleanPath = filePath.startsWith(&#39;/&#39;) ? filePath.slice(1) : filePath;
++       let cleanPath = filePath.startsWith(&#39;/&#39;) ? filePath.slice(1) : filePath;
++       
++       // If it&#39;s already a GridFS path, use it directly
++       // Otherwise, the backend will check for GridFS file ID in the order
+        const API_URL = import.meta.env.VITE_API_URL || 
+          (import.meta.env.PROD ? &#39;/api&#39; : &#39;http://localhost:5000/api&#39;);
+```
+
+</details>
+
+</tool-use>
+
+---
+
+<tool-use data-tool-type="read" data-tool-name="read_file">
+<details><summary>Tool use: **read_file** • Read file: server/routes/admin.js</summary>
+
+</details>
+</tool-use>
+
+---
+
+<tool-use data-tool-type="read" data-tool-name="read_file">
+<details><summary>Tool use: **read_file** • Read file: server/routes/admin.js</summary>
+
+</details>
+</tool-use>
+
+---
+
+<tool-use data-tool-type="read" data-tool-name="read_file">
+<details><summary>Tool use: **read_file** • Read file: server/routes/admin.js</summary>
+
+</details>
+</tool-use>
+
+---
+
+Model supplied an ambiguous edit
+
+---
+
+<tool-use data-tool-type="generic" data-tool-name="read_lints">
+<details>
+          <summary>Tool use: **read_lints** • Read lints for 3 files</summary>
+      
+Lint paths:
+
+- `server/routes/admin.js`
+- `server/routes/order.js`
+- `client/src/pages/AdminPortal.jsx`
+
+Lint results
+
+Lint errors for `client/src/pages/AdminPortal.jsx`
+
+
+| Message | Range | Severity |
+|-------|-------|----------|
+| 'disconnectSocket' is declared but its value is never read. | 4:25-4:41 | DIAGNOSTIC_SEVERITY_HINT |
+| 'getSocket' is declared but its value is never read. | 4:74-4:83 | DIAGNOSTIC_SEVERITY_HINT |
+| 'editingPrinter' is declared but its value is never read. | 21:10-21:24 | DIAGNOSTIC_SEVERITY_HINT |
+| 'setEditingPrinter' is declared but its value is never read. | 21:26-21:43 | DIAGNOSTIC_SEVERITY_HINT |
+
+
+</details>
+</tool-use>
+
+---
+
+<tool-use data-tool-type="bash" data-tool-name="run_terminal_cmd">
+<details><summary>Tool use: **command** • Run command: git add -A</summary>
+
+```bash
+git add -A
+```
+</details>
+</tool-use>
+
+---
+
+<tool-use data-tool-type="bash" data-tool-name="run_terminal_cmd">
+<details><summary>Tool use: **command** • Run command: git commit -m "Fix GridFS file streaming and update frontend to handle GridFS paths"</summary>
+
+```bash
+git commit -m "Fix GridFS file streaming and update frontend to handle GridFS paths"
+```
+
+```
+[main 333d658] Fix GridFS file streaming and update frontend to handle GridFS paths
+ 1 file changed, 7 insertions(+), 2 deletions(-)
+
+```
+</details>
+</tool-use>
+
+---
+
+<tool-use data-tool-type="bash" data-tool-name="run_terminal_cmd">
+<details><summary>Tool use: **command** • Run command: git push origin main</summary>
+
+```bash
+git push origin main
+```
+
+```
+To https://github.com/ascrllo-maker/inkline-printing-system.git
+   db5ccb1..333d658  main -&gt; main
+
+```
+</details>
+</tool-use>
+
+---
+
+
+
+---
+
+
+## Implemented MongoDB GridFS for file storage
+
+### Problem
+- Render’s filesystem is ephemeral: files are lost on redeploy/restart.
+- Existing files are not recoverable after a restart.
+
+### Solution: MongoDB GridFS
+Files are stored in MongoDB for persistence.
+
+### Changes
+
+1. Order model (`server/models/Order.js`):
+   - Added `gridfsFileId` field to store the GridFS file ID.
+
+2. Upload middleware (`server/middleware/upload.js`):
+   - Switched to memory storage (files in memory before GridFS upload).
+   - Files are uploaded to GridFS when creating orders.
+
+3. Order creation (`server/routes/order.js`):
+   - New orders store files in GridFS.
+   - Saves `gridfsFileId` in the database.
+   - Falls back to filesystem if GridFS fails.
+   - Stores metadata (original name, MIME type, uploader).
+
+4. File serving (`server/routes/admin.js`):
+   - Supports GridFS paths (`/gridfs/fileId`).
+   - Falls back: filesystem → GridFS (via order lookup).
+   - Serves from GridFS when the filesystem file is missing but the order has `gridfsFileId`.
+   - Backward compatible with legacy paths.
+
+5. Frontend (`client/src/pages/AdminPortal.jsx`):
+   - Handles both filesystem and GridFS paths.
+   - Improved error messages.
+
+### How it works
+
+For new orders:
+1. File uploaded → stored in memory.
+2. File uploaded to GridFS.
+3. GridFS file ID saved in the order.
+4. File persists in MongoDB.
+
+For file serving:
+1. Request comes in with file path.
+2. Backend checks filesystem.
+3. If missing, checks order for `gridfsFileId`.
+4. Serves from GridFS if available.
+
+### Important notes
+
+- New orders: Files are stored in GridFS and persist.
+- Old orders: Files uploaded before this change are lost on Render and cannot be recovered.
+- Migration: Old orders will show 404 until re-uploaded.
+
+### Next steps
+
+1. Test new file uploads: create a new order and verify the file opens.
+2. Check Render logs: confirm GridFS storage and serving.
+3. Old files: cannot be recovered; users will need to re-upload if needed.
+
+### Test after deployment
+
+1. Create a new order with a file.
+2. Click Download.
+3. Expected: file opens correctly.
+4. Check logs: should show "File stored in GridFS".
+
+Changes committed and pushed. Render will auto-deploy. After deployment, new file uploads will use GridFS and persist. Existing files uploaded before this change cannot be recovered due to Render’s ephemeral filesystem.
+
+---
+
+_**User (2025-11-08 12:00Z)**_
+
+now it shows this again when opening the file uploaded by a student
+
+---
+
+_**Agent (model default, mode Agent)**_
+
+
+
+---
+

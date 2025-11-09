@@ -147,7 +147,10 @@ export default function StudentPortal() {
                       return psSize === currSize;
                     });
                     if (!isCurrentSizeAvailable) {
-                      toast.info(`Paper size ${currentSize} is no longer available. Changed to ${availableSizes[0].size}`);
+                      toast(`Paper size ${currentSize} is no longer available. Changed to ${availableSizes[0].size}`, {
+                        icon: 'ℹ️',
+                        duration: 3000
+                      });
                       return {
                         ...currentForm,
                         paperSize: availableSizes[0].size
@@ -609,7 +612,10 @@ export default function StudentPortal() {
       
       // Show info message if paper size was changed
       if (!isCurrentSizeAvailable && currentSize && paperSizeToUse !== currentSize) {
-        toast.info(`Paper size set to ${paperSizeToUse} (${currentSize} not available for this printer)`);
+        toast(`Paper size set to ${paperSizeToUse} (${currentSize} not available for this printer)`, {
+          icon: 'ℹ️',
+          duration: 3000
+        });
       }
       
       // Ensure we have a valid printer ID

@@ -373,10 +373,11 @@ router.put('/printers/:id', protect, async (req, res) => {
       await updatedPrinter.save();
     }
 
-    // Emit socket event with updated printer
+    // Emit socket event with updated printer (convert to plain object)
     const io = req.app.get('io');
     if (io) {
-      io.emit('printer_updated', updatedPrinter);
+      const printerData = updatedPrinter.toObject ? updatedPrinter.toObject() : updatedPrinter;
+      io.emit('printer_updated', printerData);
     }
 
     res.json({ message: 'Printer updated successfully', printer: updatedPrinter });

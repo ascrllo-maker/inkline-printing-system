@@ -6,6 +6,10 @@ import Notification from '../models/Notification.js';
 import Violation from '../models/Violation.js';
 import { protect, adminOnly } from '../middleware/auth.js';
 import { sendAccountApprovedEmail, sendOrderReadyEmail, sendOrderPrintingEmail, sendViolationWarningEmail, sendViolationSettledEmail, sendBanNotificationEmail, sendUnbanNotificationEmail } from '../utils/email.js';
+import path from 'path';
+import { fileURLToPath } from 'url';
+import fs from 'fs';
+import mime from 'mime-types';
 
 const router = express.Router();
 
@@ -804,6 +808,91 @@ router.put('/settle-violation/:id', protect, async (req, res) => {
 
     res.json({ message: 'Violation marked as settled', violation });
   } catch (error) {
+    res.status(500).json({ message: 'Server error', error: error.message });
+  }
+});
+
+// ==================== FILE SERVING ====================
+
+const __filename = fileURLToPath(import.meta.url);
+const __dirname = path.dirname(__filename);
+
+// @route   GET /api/admin/file/:filePath
+// @desc    Serve file with authentication (for admin viewing)
+// @access  Private (Admin only)
+router.get('/file/*', protect, async (req, res) => {
+  try {
+    // Get the file path from the request
+    const filePath = req.params[0]; // Get everything after /api/admin/file/
+    
+    if (!filePath) {
+      return res.status(400).json({ message: 'File path is required' });
+    }
+
+    // Extract shop from file path to verify admin access
+    // File paths are like: uploads/files/filename or uploads/ids/filename (no leading slash)
+    const pathParts = filePath.split('/').filter(p => p); // Remove empty parts
+    if (pathParts.length < 2 || pathParts[0] !== 'uploads') {
+      return res.status(400).json({ message: 'Invalid file path format' });
+    }
+
+    // Construct the full file path
+    const uploadsDir = path.join(__dirname, '../../uploads');
+    // pathParts is like: ['uploads', 'files', 'filename']
+    // We want: uploads/files/filename
+    const relativePath = pathParts.join(path.sep);
+    const fullPath = path.resolve(uploadsDir, pathParts.slice(1).join(path.sep));
+
+    // Security: Prevent directory traversal
+    if (!fullPath.startsWith(uploadsDir)) {
+      return res.status(403).json({ message: 'Access denied' });
+    }
+
+    // Check if file exists
+    if (!fs.existsSync(fullPath)) {
+      return res.status(404).json({ message: 'File not found' });
+    }
+
+    // If it's an order file, verify the admin has access to this shop
+    if (pathParts[1] === 'files') {
+      // Find the order that contains this file
+      const fileName = pathParts[pathParts.length - 1];
+      const order = await Order.findOne({ filePath: `/uploads/files/${fileName}` });
+      
+      if (order) {
+        // Check admin permission for this shop
+        if (order.shop === 'IT' && req.user.role !== 'it_admin') {
+          return res.status(403).json({ message: 'Access denied' });
+        }
+        if (order.shop === 'SSC' && req.user.role !== 'ssc_admin') {
+          return res.status(403).json({ message: 'Access denied' });
+        }
+      }
+    }
+
+    // Determine content type from file extension
+    const ext = path.extname(fullPath);
+    const contentType = mime.lookup(ext) || 'application/octet-stream';
+
+    // Set headers for proper file display
+    res.setHeader('Content-Type', contentType);
+    res.setHeader('Content-Disposition', 'inline; filename="' + path.basename(fullPath) + '"');
+    res.setHeader('Cache-Control', 'private, max-age=3600');
+    res.setHeader('X-Content-Type-Options', 'nosniff');
+
+    // Stream the file
+    const fileStream = fs.createReadStream(fullPath);
+    fileStream.pipe(res);
+
+    fileStream.on('error', (error) => {
+      console.error('Error streaming file:', error);
+      if (!res.headersSent) {
+        res.status(500).json({ message: 'Error reading file' });
+      }
+    });
+
+  } catch (error) {
+    console.error('Error serving file:', error);
     res.status(500).json({ message: 'Server error', error: error.message });
   }
 });

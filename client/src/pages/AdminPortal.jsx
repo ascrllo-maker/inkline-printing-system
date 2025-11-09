@@ -89,7 +89,7 @@ export default function AdminPortal({ shop }) {
     }
   };
 
-  // Handle file download - opens file in new tab
+  // Handle file download - opens file in new tab via authenticated endpoint
   const handleDownloadFile = async (filePath, fileName) => {
     try {
       if (!filePath) {
@@ -97,20 +97,26 @@ export default function AdminPortal({ shop }) {
         return;
       }
 
-      // Show loading toast
-      const loadingToast = toast.loading('Loading file...');
+      const loadingToast = toast.loading('Opening file...');
 
       // Get the token for authentication
       const token = localStorage.getItem('token');
       
-      // Construct the full URL
-      // In production, use relative path; in development, use full URL
+      if (!token) {
+        toast.dismiss(loadingToast);
+        toast.error('Authentication required');
+        return;
+      }
+
+      // Construct the authenticated file URL
+      // File path is like: /uploads/files/filename
+      // Remove leading slash for the API endpoint
+      const cleanPath = filePath.startsWith('/') ? filePath.slice(1) : filePath;
       const API_URL = import.meta.env.VITE_API_URL || 
-        (import.meta.env.PROD ? '' : 'http://localhost:5000');
-      const fileUrl = `${API_URL}${filePath}`;
+        (import.meta.env.PROD ? '/api' : 'http://localhost:5000/api');
       
-      // Fetch the file with authentication
-      const response = await fetch(fileUrl, {
+      // Fetch the file using the authenticated endpoint
+      const response = await fetch(`${API_URL}/admin/file/${cleanPath}`, {
         method: 'GET',
         headers: {
           'Authorization': `Bearer ${token}`,
@@ -119,85 +125,58 @@ export default function AdminPortal({ shop }) {
 
       if (!response.ok) {
         toast.dismiss(loadingToast);
-        throw new Error('Failed to load file');
+        const errorText = await response.text();
+        console.error('File fetch error:', response.status, errorText);
+        throw new Error(`Failed to load file: ${response.status} ${response.statusText}`);
       }
 
-      // Get the content type from response headers
-      let contentType = response.headers.get('content-type') || 'application/octet-stream';
-      
-      // If content-type is generic or missing, try to infer from file extension
-      if (contentType === 'application/octet-stream' || !contentType) {
-        const extension = fileName.split('.').pop()?.toLowerCase();
-        const mimeTypes = {
-          'pdf': 'application/pdf',
-          'doc': 'application/msword',
-          'docx': 'application/vnd.openxmlformats-officedocument.wordprocessingml.document',
-          'ppt': 'application/vnd.ms-powerpoint',
-          'pptx': 'application/vnd.openxmlformats-officedocument.presentationml.presentation',
-          'xls': 'application/vnd.ms-excel',
-          'xlsx': 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
-          'jpg': 'image/jpeg',
-          'jpeg': 'image/jpeg',
-          'png': 'image/png',
-          'gif': 'image/gif',
-          'txt': 'text/plain',
-          'html': 'text/html',
-          'htm': 'text/html'
-        };
-        if (extension && mimeTypes[extension]) {
-          contentType = mimeTypes[extension];
-        }
-      }
-      
-      // Get the file as an array buffer first to ensure we have all the data
-      const arrayBuffer = await response.arrayBuffer();
-      
-      // Create a new blob with the explicit content type to ensure browser renders it correctly
-      const typedBlob = new Blob([arrayBuffer], { type: contentType });
+      // Get the file as a blob
+      const blob = await response.blob();
       
       // Verify blob was created successfully
-      if (!typedBlob || typedBlob.size === 0) {
+      if (!blob || blob.size === 0) {
         toast.dismiss(loadingToast);
         throw new Error('File is empty or could not be loaded');
       }
       
-      // Create a temporary URL for the blob
-      const blobUrl = window.URL.createObjectURL(typedBlob);
+      console.log('File loaded:', {
+        size: blob.size,
+        type: blob.type,
+        contentType: response.headers.get('content-type')
+      });
       
-      // Wait a bit to ensure blob URL is ready
-      await new Promise(resolve => setTimeout(resolve, 100));
+      // Get content type from response headers (preferred) or blob type
+      let contentType = response.headers.get('content-type');
+      if (!contentType || contentType === 'application/octet-stream') {
+        contentType = blob.type || 'application/octet-stream';
+      }
       
-      // Open the file in a new tab
+      // Create a new blob with the correct MIME type
+      const typedBlob = new Blob([blob], { type: contentType });
+      
+      // Create blob URL
+      const blobUrl = URL.createObjectURL(typedBlob);
+      console.log('Blob URL created:', blobUrl, 'Type:', contentType);
+      
+      // Open in new tab
       const newWindow = window.open(blobUrl, '_blank', 'noopener,noreferrer');
       
-      // If popup was blocked, fall back to creating a link
-      if (!newWindow || newWindow.closed || typeof newWindow.closed === 'undefined') {
-        // Create a temporary anchor element to open in new tab
-        const link = document.createElement('a');
-        link.href = blobUrl;
-        link.target = '_blank';
-        link.rel = 'noopener noreferrer';
-        document.body.appendChild(link);
-        link.click();
-        // Wait a bit before removing the link
-        setTimeout(() => {
-          document.body.removeChild(link);
-        }, 100);
+      if (!newWindow) {
+        toast.dismiss(loadingToast);
+        toast.error('Popup blocked. Please allow popups for this site.');
+        URL.revokeObjectURL(blobUrl);
+        return;
       }
       
       toast.dismiss(loadingToast);
       toast.success('File opened in new tab');
       
-      // Don't revoke the blob URL immediately - let the browser handle cleanup
-      // The blob URL will be automatically cleaned up when:
-      // 1. The new tab is closed
-      // 2. The page is refreshed
-      // 3. The browser is closed
-      // This ensures the file is always accessible in the new tab
+      // Don't revoke the blob URL - let it persist so the file can be viewed
+      // The browser will clean it up when the tab is closed or the page is refreshed
       
     } catch (error) {
       console.error('Error opening file:', error);
-      toast.error('Failed to open file. Please try again.');
+      toast.error(`Failed to open file: ${error.message}`);
     }
   };
 

@@ -13,25 +13,29 @@
     "install-all": "npm install && cd client && npm install",
     "seed-users": "node server/scripts/seedUsers.js"
   },
-  "keywords": ["printing", "queue", "education"],
+  "keywords": [
+    "printing",
+    "queue",
+    "education"
+  ],
   "author": "",
   "license": "MIT",
   "dependencies": {
-    "express": "^4.18.2",
-    "mongoose": "^8.0.3",
+    "@sendgrid/mail": "^7.7.0",
     "bcryptjs": "^2.4.3",
-    "jsonwebtoken": "^9.0.2",
     "cors": "^2.8.5",
     "dotenv": "^16.3.1",
+    "express": "^4.18.2",
+    "express-validator": "^7.0.1",
+    "jsonwebtoken": "^9.0.2",
+    "mime-types": "^3.0.1",
+    "mongoose": "^8.0.3",
     "multer": "^1.4.5-lts.1",
     "nodemailer": "^6.9.7",
-    "socket.io": "^4.6.0",
-    "express-validator": "^7.0.1",
-    "@sendgrid/mail": "^7.7.0"
+    "socket.io": "^4.6.0"
   },
   "devDependencies": {
-    "nodemon": "^3.0.2",
-    "concurrently": "^8.2.2"
+    "concurrently": "^8.2.2",
+    "nodemon": "^3.0.2"
   }
 }
-

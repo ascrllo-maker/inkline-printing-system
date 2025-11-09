@@ -1098,16 +1098,27 @@ export default function StudentPortal() {
         <div className="mb-6 sm:mb-8">
           <h3 className="text-lg sm:text-xl font-semibold mb-3 sm:mb-4 text-white drop-shadow-md">Available Printing Devices</h3>
           <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4 sm:gap-6">
-            {printers.map((printer) => {
-              const isSelected = selectedPrinter?._id === printer._id;
-              const isActive = printer.status === 'Active';
+            {printers.map((printer, index) => {
+              // Safely get printer properties
+              const printerId = printer?._id ? String(printer._id) : `printer-${index}`;
+              const selectedId = selectedPrinter?._id ? String(selectedPrinter._id) : '';
+              const isSelected = selectedId === printerId;
+              const isActive = printer?.status === 'Active';
+              
+              // Validate printer has required fields
+              if (!printer || !printerId || printerId === 'undefined' || printerId === 'null') {
+                console.warn('Invalid printer in render:', printer, index);
+                return null;
+              }
               
               return (
                 <div
-                  key={printer._id}
+                  key={printerId}
                   onClick={(e) => {
                     // Allow click on the entire card
-                    if (isActive) {
+                    if (isActive && printer) {
+                      e.stopPropagation();
+                      e.preventDefault();
                       handlePrinterClick(printer, e);
                     }
                   }}
@@ -1123,21 +1134,21 @@ export default function StudentPortal() {
                 >
                   <div className="flex justify-between items-start mb-3 sm:mb-4 gap-2">
                     <h4 className={`text-base sm:text-lg font-semibold flex-1 min-w-0 ${isSelected ? 'text-white' : 'text-white'}`}>
-                      <span className="truncate block">{printer.name}</span>
+                      <span className="truncate block">{printer?.name || 'Unknown Printer'}</span>
                       {isSelected && (
                         <span className="ml-0 sm:ml-2 text-blue-200 text-xs sm:text-sm block sm:inline mt-1 sm:mt-0 font-bold">✓ Selected</span>
                       )}
                     </h4>
                     <span
                       className={`px-2 sm:px-3 py-1 rounded-full text-xs font-medium flex-shrink-0 pointer-events-none ${
-                        printer.status === 'Active'
+                        printer?.status === 'Active'
                           ? 'bg-green-300/80 text-green-900'
-                          : printer.status === 'Offline'
+                          : printer?.status === 'Offline'
                           ? 'bg-gray-300/80 text-gray-900'
                           : 'bg-red-300/80 text-red-900'
                       }`}
                     >
-                      {printer.status}
+                      {printer?.status || 'Unknown'}
                     </span>
                   </div>
                   <div 
@@ -1147,12 +1158,12 @@ export default function StudentPortal() {
                   >
                     <p className={`text-xs sm:text-sm mb-1 text-white/90`}>Queue</p>
                     <p className={`text-2xl sm:text-3xl font-bold text-white`}>
-                      {printer.queueCount || 0}
+                      {printer?.queueCount || 0}
                     </p>
                   </div>
                 </div>
               );
-            })}
+            }).filter(Boolean)}
           </div>
         </div>
 

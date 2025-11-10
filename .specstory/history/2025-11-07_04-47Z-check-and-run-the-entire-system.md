@@ -22878,20 +22878,161 @@ _**Agent (model default, mode Agent)**_
 ---
 
 
+Not yet. These changes are only local. We'll push them to GitHub so Render redeploys. Checking git status, then we'll commit and push.
+
 
 ---
 
-<tool-use data-tool-type="unknown" data-tool-name="run_terminal_cmd">
-<details>
-<summary>Tool use: **run_terminal_cmd**</summary>
+<tool-use data-tool-type="bash" data-tool-name="run_terminal_cmd">
+<details><summary>Tool use: **command** • Run command: git status</summary>
 
-Status: **loading**
+```bash
+git status
+```
 
+```
+On branch main
+Your branch is up to date with &#39;origin/main&#39;.
 
+Changes not staged for commit:
+  (use &quot;git add &lt;file&gt;...&quot; to update what will be committed)
+  (use &quot;git restore &lt;file&gt;...&quot; to discard changes in working directory)
+	modified:   .specstory/history/2025-11-07_04-47Z-check-and-run-the-entire-system.md
+	modified:   client/src/pages/AdminPortal.jsx
+	modified:   client/src/pages/StudentPortal.jsx
+	modified:   client/src/services/api.js
+	modified:   server/index.js
+	modified:   server/models/Order.js
+	modified:   server/routes/admin.js
+	modified:   server/routes/order.js
+
+Untracked files:
+  (use &quot;git add &lt;file&gt;...&quot; to include in what will be committed)
+	server/models/Pricing.js
+	server/routes/pricing.js
+	server/scripts/initPricing.js
+
+no changes added to commit (use &quot;git add&quot; and/or &quot;git commit -a&quot;)
+
+```
 </details>
 </tool-use>
 
 ---
+
+
+
+---
+
+
+Staging changes, then committing and pushing to GitHub so Render redeploys.
+
+
+---
+
+<tool-use data-tool-type="bash" data-tool-name="run_terminal_cmd">
+<details><summary>Tool use: **command** • Run command: git add .</summary>
+
+```bash
+git add .
+```
+</details>
+</tool-use>
+
+---
+
+<tool-use data-tool-type="bash" data-tool-name="run_terminal_cmd">
+<details><summary>Tool use: **command** • Run command: git commit -m "Add pricing integration: pricing management, price calculation, and real-time updates"</summary>
+
+```bash
+git commit -m "Add pricing integration: pricing management, price calculation, and real-time updates"
+```
+
+```
+[main 425180c] Add pricing integration: pricing management, price calculation, and real-time updates
+ 11 files changed, 16601 insertions(+), 46141 deletions(-)
+ create mode 100644 server/models/Pricing.js
+ create mode 100644 server/routes/pricing.js
+ create mode 100644 server/scripts/initPricing.js
+
+```
+</details>
+</tool-use>
+
+---
+
+<tool-use data-tool-type="bash" data-tool-name="run_terminal_cmd">
+<details><summary>Tool use: **command** • Run command: git push origin main</summary>
+
+```bash
+git push origin main
+```
+
+```
+To https://github.com/ascrllo-maker/inkline-printing-system.git
+   3ba08d6..425180c  main -&gt; main
+
+```
+</details>
+</tool-use>
+
+---
+
+
+
+---
+
+
+Changes pushed to GitHub. Render should detect the push and start deploying automatically.
+
+## Deployment status
+- Changes pushed to GitHub
+- Render will auto-deploy (usually 2–5 minutes)
+
+## After deployment completes
+Initialize pricing. Two options:
+
+### Option 1: Manual setup (recommended)
+1. Log in to the Admin Portal (IT or SSC)
+2. Open the PRICING tab
+3. Set prices for each paper size (A4, Letter, Legal, Long) and color type (Black & White, Colored)
+4. Click "Save Pricing"
+
+### Option 2: Initialize default pricing
+Run the initialization script locally (uses your MongoDB connection):
+
+```bash
+node server/scripts/initPricing.js
+```
+
+This sets default pricing:
+- A4: ₱2.00 (B&W), ₱5.00 (Colored)
+- Letter: ₱2.00 (B&W), ₱5.00 (Colored)
+- Legal: ₱2.50 (B&W), ₱6.00 (Colored)
+- Long: ₱3.00 (B&W), ₱7.00 (Colored)
+
+## Verify deployment
+1. Check Render dashboard for a successful build
+2. Visit the website
+3. Admin Portal: PRICING tab appears
+4. Student Portal: price preview shows in the order form
+
+## Notes
+- Without pricing set, students may see errors when creating orders
+- Prices are shop-specific (IT and SSC can have different prices)
+- Pricing updates sync in real time via Socket.IO
+
+After Render finishes deploying, set pricing through the admin portal, then test by creating an order in the student portal.
+
+---
+
+_**User (2025-11-10 14:37Z)**_
+
+I can't update order status in the ORDERS tab, and also it says that no printers with paper sizes found. please add printers first in the pricing tab even though I already have 3 printers. fix all of these
+
+---
+
+_**Agent (model default, mode Agent)**_
 
 
 

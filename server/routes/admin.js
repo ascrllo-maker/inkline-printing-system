@@ -173,8 +173,12 @@ router.put('/update-order-status/:id', protect, async (req, res) => {
     const oldStatus = order.status;
     order.status = status;
 
-    // Get printer ID
-    const printerId = order.printerId._id || order.printerId;
+    // Get printer ID (handle both populated and unpopulated cases)
+    const printerId = order.printerId?._id || order.printerId;
+    if (!printerId) {
+      console.error('Order printerId is missing:', order._id);
+      return res.status(400).json({ message: 'Order printer information is missing' });
+    }
 
     if (status === 'Completed') {
       order.completedAt = new Date();
@@ -255,6 +259,13 @@ router.put('/update-order-status/:id', protect, async (req, res) => {
     }
 
     // Create notification for user
+    // Ensure userId is properly accessed (handle both populated and unpopulated cases)
+    const userId = order.userId?._id || order.userId;
+    if (!userId) {
+      console.error('Order userId is missing:', order._id);
+      return res.status(400).json({ message: 'Order user information is missing' });
+    }
+
     let notificationMessage = '';
     if (status === 'In Queue') notificationMessage = `Your order #${order.orderNumber} is in queue.`;
     if (status === 'Printing') notificationMessage = `Your order #${order.orderNumber} is now being printed.`;
@@ -262,29 +273,41 @@ router.put('/update-order-status/:id', protect, async (req, res) => {
     if (status === 'Ready for Pickup & Payment') notificationMessage = `Your order #${order.orderNumber} is ready for pickup and payment!`;
     if (status === 'Completed') notificationMessage = `Your order #${order.orderNumber} has been completed.`;
 
-    await Notification.create({
-      userId: order.userId._id,
-      title: 'Order Status Updated',
-      message: notificationMessage,
-      type: 'order_update',
-      relatedOrderId: order._id
-    });
-
-    // Send email notifications for order status changes (non-blocking)
-    if (status === 'Printing') {
-      sendOrderPrintingEmail(order.userId.email, order.userId.fullName, order.orderNumber, order.shop).catch(emailError => {
-        console.error('Error sending printing email:', emailError.message || emailError);
+    try {
+      await Notification.create({
+        userId: userId,
+        title: 'Order Status Updated',
+        message: notificationMessage,
+        type: 'order_update',
+        relatedOrderId: order._id
       });
-    } else if (status === 'Ready for Pickup' || status === 'Ready for Pickup & Payment') {
-      sendOrderReadyEmail(order.userId.email, order.userId.fullName, order.orderNumber, order.shop).catch(emailError => {
-        console.error('Error sending ready email:', emailError.message || emailError);
-      });
+    } catch (notifError) {
+      console.error('Error creating notification:', notifError);
+      // Continue even if notification creation fails
     }
 
-    // Populate order before emitting
+    // Populate order before emitting and sending emails
     const populatedOrderForEmit = await Order.findById(order._id)
       .populate('userId', 'fullName email')
       .populate('printerId');
+
+    // Get user info from populated order (fallback to original order if population failed)
+    const userEmail = populatedOrderForEmit?.userId?.email || order.userId?.email;
+    const userFullName = populatedOrderForEmit?.userId?.fullName || order.userId?.fullName;
+    const populatedUserId = populatedOrderForEmit?.userId?._id || populatedOrderForEmit?.userId || userId;
+
+    // Send email notifications for order status changes (non-blocking)
+    if (userEmail && userFullName) {
+      if (status === 'Printing') {
+        sendOrderPrintingEmail(userEmail, userFullName, order.orderNumber, order.shop).catch(emailError => {
+          console.error('Error sending printing email:', emailError.message || emailError);
+        });
+      } else if (status === 'Ready for Pickup' || status === 'Ready for Pickup & Payment') {
+        sendOrderReadyEmail(userEmail, userFullName, order.orderNumber, order.shop).catch(emailError => {
+          console.error('Error sending ready email:', emailError.message || emailError);
+        });
+      }
+    }
 
     // Send response immediately
     res.json({ message: 'Order status updated successfully', order: populatedOrderForEmit || order });
@@ -294,7 +317,9 @@ router.put('/update-order-status/:id', protect, async (req, res) => {
     if (io) {
       setImmediate(() => {
         try {
-          io.to(order.userId._id.toString()).emit('order_updated', populatedOrderForEmit || order);
+          if (populatedUserId) {
+            io.to(populatedUserId.toString()).emit('order_updated', populatedOrderForEmit || order);
+          }
           io.to(`${order.shop}_admins`).emit('order_updated', populatedOrderForEmit || order);
         } catch (socketError) {
           console.error('Error emitting socket events:', socketError);

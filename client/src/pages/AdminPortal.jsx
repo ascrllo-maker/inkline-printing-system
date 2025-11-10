@@ -669,12 +669,17 @@ export default function AdminPortal({ shop }) {
           setViolations(res.data);
         }
       } else if (currentTab === 'PRICING') {
-        const res = await adminPricingAPI.getPricing(shop);
+        // Load both printers and pricing for the PRICING tab
+        const [pricingRes, printersRes] = await Promise.all([
+          adminPricingAPI.getPricing(shop),
+          printerAPI.getPrinters(shop),
+        ]);
         if (activeTabRef.current === 'PRICING') {
-          setPricing(res.data);
+          setPricing(pricingRes.data);
+          setPrinters(printersRes.data);
           // Initialize editing pricing state
           const pricingMap = {};
-          res.data.forEach(item => {
+          pricingRes.data.forEach(item => {
             const key = `${item.paperSize}-${item.colorType}`;
             pricingMap[key] = item.pricePerCopy;
           });

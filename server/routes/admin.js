@@ -29,19 +29,20 @@ router.get('/pending-accounts', protect, adminOnly('IT'), async (req, res) => {
     }).select('-password').sort({ createdAt: -1 });
 
     // Convert ID image paths to API URLs that can be accessed
+    // Note: Return relative paths (without /api prefix) since the frontend API client already includes it
     const accountsWithImageUrls = pendingAccounts.map(account => {
       const accountObj = account.toObject();
       
       // If account has GridFS ID, use GridFS endpoint
       if (accountObj.idImageGridFSId) {
-        accountObj.idImage = `/api/admin/id-image/${accountObj.idImageGridFSId}`;
+        accountObj.idImage = `/admin/id-image/${accountObj.idImageGridFSId}`;
       } else if (accountObj.idImage) {
         // Legacy: if it's a filesystem path, convert to API endpoint
         // Extract filename from path (e.g., /uploads/ids/filename.jpg -> filename.jpg)
         const pathParts = accountObj.idImage.split('/');
         const filename = pathParts[pathParts.length - 1];
         if (filename) {
-          accountObj.idImage = `/api/admin/id-image/file/${filename}`;
+          accountObj.idImage = `/admin/id-image/file/${filename}`;
         } else {
           accountObj.idImage = null;
         }

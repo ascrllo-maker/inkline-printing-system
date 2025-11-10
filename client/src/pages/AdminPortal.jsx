@@ -31,8 +31,14 @@ function IDImageDisplay({ imageUrl }) {
         setLoading(true);
         setError(false);
 
-        // Ensure the URL starts with /api
-        const url = imageUrl.startsWith('/api/') ? imageUrl : `/api${imageUrl}`;
+        // The imageUrl should be a relative path (e.g., /admin/id-image/fileId)
+        // The api instance will automatically add the baseURL (/api)
+        // Remove any leading /api if present to avoid double /api/api
+        const url = imageUrl.startsWith('/api/') 
+          ? imageUrl.replace('/api', '') 
+          : imageUrl.startsWith('/') 
+            ? imageUrl 
+            : `/${imageUrl}`;
         
         // Fetch image with authentication headers
         const response = await api.get(url, {

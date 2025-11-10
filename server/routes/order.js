@@ -384,10 +384,25 @@ router.put('/cancel/:id', protect, async (req, res) => {
     order.status = 'Cancelled';
     order.queuePosition = 0; // Reset queue position when cancelled
     
+    // Ensure pricing fields exist for backward compatibility
+    if (order.pricePerCopy == null) {
+      order.pricePerCopy = 0;
+    }
+    if (order.totalPrice == null) {
+      order.totalPrice = 0;
+    }
+    
     try {
       await order.save();
     } catch (saveError) {
       console.error('Error saving cancelled order:', saveError);
+      console.error('Order data:', {
+        _id: order._id,
+        status: order.status,
+        pricePerCopy: order.pricePerCopy,
+        totalPrice: order.totalPrice,
+        validationError: saveError.errors
+      });
       return res.status(500).json({ message: 'Failed to cancel order', error: saveError.message });
     }
 

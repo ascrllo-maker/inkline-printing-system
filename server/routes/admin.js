@@ -206,11 +206,26 @@ router.put('/update-order-status/:id', protect, async (req, res) => {
       order.queuePosition = 0;
     }
 
+    // Ensure pricing fields exist for backward compatibility
+    if (order.pricePerCopy == null) {
+      order.pricePerCopy = 0;
+    }
+    if (order.totalPrice == null) {
+      order.totalPrice = 0;
+    }
+
     // Save order first before recalculating queue count
     try {
       await order.save();
     } catch (saveError) {
       console.error('Error saving order status:', saveError);
+      console.error('Order data:', {
+        _id: order._id,
+        status: order.status,
+        pricePerCopy: order.pricePerCopy,
+        totalPrice: order.totalPrice,
+        validationError: saveError.errors
+      });
       return res.status(500).json({ message: 'Failed to update order status', error: saveError.message });
     }
 

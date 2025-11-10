@@ -57,13 +57,15 @@ const orderSchema = new mongoose.Schema({
   },
   pricePerCopy: {
     type: Number,
-    required: true,
-    min: 0
+    required: false, // Make optional for backward compatibility with old orders
+    min: 0,
+    default: 0
   },
   totalPrice: {
     type: Number,
-    required: true,
-    min: 0
+    required: false, // Make optional for backward compatibility with old orders
+    min: 0,
+    default: 0
   },
   status: {
     type: String,

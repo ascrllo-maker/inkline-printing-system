@@ -746,7 +746,9 @@ export default function StudentPortal() {
       toast.success('Order cancelled');
       loadShopData();
     } catch (error) {
-      toast.error(error.response?.data?.message || 'Failed to cancel order');
+      const errorMessage = error.response?.data?.message || error.response?.data?.error || error.message || 'Failed to cancel order';
+      console.error('Error cancelling order:', error);
+      toast.error(errorMessage);
     }
   };
 

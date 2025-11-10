@@ -707,7 +707,9 @@ export default function AdminPortal({ shop }) {
     } catch (error) {
       // Revert on error
       loadData();
-      toast.error('Failed to update order status');
+      const errorMessage = error.response?.data?.message || error.response?.data?.error || error.message || 'Failed to update order status';
+      console.error('Error updating order status:', error);
+      toast.error(errorMessage);
     }
   }, [loadData]);
 

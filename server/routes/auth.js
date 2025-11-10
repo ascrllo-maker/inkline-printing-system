@@ -89,7 +89,8 @@ router.post('/signup', uploadId.single('idImage'), async (req, res) => {
           }
           
           fs.writeFileSync(filePath_local, req.file.buffer);
-          idImagePath = `/api/admin/id-image/file/${filename}`;
+          // Store relative path (without /api prefix) since frontend API client adds it
+          idImagePath = `/admin/id-image/file/${filename}`;
         }
       }
 

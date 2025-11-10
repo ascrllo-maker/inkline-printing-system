@@ -1,4 +1,8 @@
 import fs from 'fs';
+import { createRequire } from 'module';
+
+const require = createRequire(import.meta.url);
+const pdfParse = require('pdf-parse');
 
 /**
  * Count pages in a file based on its type
@@ -11,8 +15,6 @@ export const countPages = async (fileBuffer, mimeType, fileName) => {
   try {
     // PDF files
     if (mimeType === 'application/pdf' || fileName.toLowerCase().endsWith('.pdf')) {
-      // Dynamic import for pdf-parse (CommonJS module)
-      const pdfParse = (await import('pdf-parse')).default;
       const data = await pdfParse(fileBuffer);
       return data.numpages || 1;
     }

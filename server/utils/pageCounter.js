@@ -39,16 +39,26 @@ export const countPages = async (fileBuffer, mimeType, fileName) => {
         
         // Method 1: Count page objects directly (most reliable - each page has a /Type /Page)
         // Look for "/Type/Page" or "/Type /Page" patterns (PDF allows optional whitespace)
-        const pageObjPattern = /\/Type\s*\/Page(?:\s|>|>>|obj|endobj)/g;
-        const pageObjMatches = [];
-        let match;
-        while ((match = pageObjPattern.exec(pdfText)) !== null) {
-          pageObjMatches.push(match[0]);
+        // More flexible pattern to catch variations: /Type/Page, /Type /Page, /Type\n/Page, etc.
+        const pageObjPatterns = [
+          /\/Type\s*\/Page(?:\s|>|>>|obj|endobj|\/)/g,
+          /\/Type\s*\/Page\s*(?:>>|R|obj)/g,
+          /\/Type[\/\s]\/Page/g
+        ];
+        
+        const allPageObjects = new Set();
+        for (const pattern of pageObjPatterns) {
+          let match;
+          while ((match = pattern.exec(pdfText)) !== null) {
+            // Store the position to avoid counting the same object twice
+            const pos = match.index;
+            allPageObjects.add(pos);
+          }
         }
         
-        if (pageObjMatches.length > 0) {
-          pageCountFromStructure = pageObjMatches.length;
-          console.log(`Method 1: Found ${pageCountFromStructure} pages by counting /Type /Page objects`);
+        if (allPageObjects.size > 0) {
+          pageCountFromStructure = allPageObjects.size;
+          console.log(`Method 1: Found ${pageCountFromStructure} pages by counting /Type /Page objects (unique positions: ${allPageObjects.size})`);
         }
         
         // Method 2: Look for /Count in page tree nodes (very reliable for multi-page PDFs)
@@ -84,20 +94,27 @@ export const countPages = async (fileBuffer, mimeType, fileName) => {
         }
         
         // Method 3: Look for all /Count values and find the maximum reasonable one
-        if (!pageCountFromStructure || pageCountFromStructure === 1) {
-          const allCountMatches = pdfText.match(/\/Count\s+(\d+)/g);
-          if (allCountMatches && allCountMatches.length > 0) {
-            const allCounts = allCountMatches.map(m => {
-              const numMatch = m.match(/(\d+)/);
-              return numMatch ? parseInt(numMatch[1]) : 0;
-            }).filter(c => c > 0 && c < 100000 && c > 1); // Only consider counts > 1
+        // This is ALWAYS checked because /Count in the page tree is the most reliable indicator
+        const allCountMatches = pdfText.match(/\/Count\s+(\d+)/g);
+        if (allCountMatches && allCountMatches.length > 0) {
+          const allCounts = allCountMatches.map(m => {
+            const numMatch = m.match(/(\d+)/);
+            return numMatch ? parseInt(numMatch[1]) : 0;
+          }).filter(c => c > 0 && c < 100000); // Consider all counts, not just > 1
+          
+          if (allCounts.length > 0) {
+            // Sort counts and look for the largest reasonable one
+            const sortedCounts = allCounts.sort((a, b) => b - a);
+            // The largest count is often the total page count in the root page tree
+            const maxCount = sortedCounts[0];
             
-            if (allCounts.length > 0) {
-              const maxCount = Math.max(...allCounts);
-              // Use this if it's reasonable and larger than 1
-              if (maxCount > pageCountFromStructure) {
+            // Always prefer /Count if it's larger than page object count
+            // Page object count can be inaccurate if PDF uses object streams or compression
+            if (!pageCountFromStructure || maxCount >= pageCountFromStructure) {
+              // Only use if it's reasonable (not too large)
+              if (maxCount < 10000) {
                 pageCountFromStructure = maxCount;
-                console.log(`Method 3: Found ${pageCountFromStructure} pages from /Count values`);
+                console.log(`Method 3: Found ${pageCountFromStructure} pages from /Count values (checked ${allCounts.length} counts, max was ${maxCount})`);
               }
             }
           }

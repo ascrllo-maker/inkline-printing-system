@@ -23,10 +23,47 @@ export const countPages = async (fileBuffer, mimeType, fileName) => {
     if (mimeType === 'application/pdf' || fileName.toLowerCase().endsWith('.pdf')) {
       console.log(`Attempting to parse PDF: ${fileName}, MIME type: ${mimeType}, Buffer size: ${fileBuffer.length} bytes`);
       
+      // Verify it's actually a PDF by checking the file header
+      const pdfHeader = fileBuffer.toString('ascii', 0, 4);
+      if (pdfHeader !== '%PDF') {
+        console.warn(`File ${fileName} does not have PDF header. Header: ${pdfHeader}`);
+        // Still try to parse it in case it's a valid PDF with unusual structure
+      }
+      
       try {
-        const data = await pdfParse(fileBuffer);
+        // Parse with options to ensure all pages are read
+        const data = await pdfParse(fileBuffer, {
+          // Options to improve page counting accuracy
+          max: 0, // 0 = no limit on pages to parse
+          version: 'v1.10.100' // Use a specific parser version for consistency
+        });
+        
         const pageCount = data.numpages || 1;
-        console.log(`Successfully parsed PDF ${fileName}: ${pageCount} pages`);
+        console.log(`Successfully parsed PDF ${fileName}: ${pageCount} pages (numpages: ${data.numpages}, info: ${JSON.stringify(data.info || {})})`);
+        
+        // Double-check: if numpages seems wrong, try alternative method
+        if (pageCount === 1 && fileBuffer.length > 50000) {
+          // Large file but only 1 page? This might be wrong
+          console.warn(`Warning: Large PDF file (${fileBuffer.length} bytes) detected as 1 page. This might be inaccurate.`);
+          
+          // Try to extract page count from PDF structure directly
+          try {
+            const pdfText = fileBuffer.toString('binary');
+            // Look for /Count patterns in the PDF (common way to store page count)
+            const countMatches = pdfText.match(/\/Count\s+(\d+)/g);
+            if (countMatches && countMatches.length > 0) {
+              const counts = countMatches.map(m => parseInt(m.match(/\d+/)[0]));
+              const maxCount = Math.max(...counts);
+              if (maxCount > pageCount) {
+                console.log(`Found alternative page count from PDF structure: ${maxCount} pages`);
+                return maxCount;
+              }
+            }
+          } catch (altError) {
+            console.error('Error in alternative page counting method:', altError);
+          }
+        }
+        
         return pageCount;
       } catch (pdfError) {
         console.error(`Error parsing PDF ${fileName}:`, pdfError);
@@ -35,7 +72,8 @@ export const countPages = async (fileBuffer, mimeType, fileName) => {
           stack: pdfError.stack,
           fileName: fileName,
           bufferLength: fileBuffer.length,
-          mimeType: mimeType
+          mimeType: mimeType,
+          pdfHeader: fileBuffer.toString('ascii', 0, 10)
         });
         // Re-throw to be caught by outer catch
         throw pdfError;

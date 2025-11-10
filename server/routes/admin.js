@@ -156,7 +156,16 @@ router.get('/orders/:shop', protect, async (req, res) => {
 router.put('/update-order-status/:id', protect, async (req, res) => {
   try {
     const { status } = req.body;
-    const order = await Order.findById(req.params.id).populate('userId printerId');
+    
+    // Validate status
+    const validStatuses = ['In Queue', 'Printing', 'Ready for Pickup', 'Ready for Pickup & Payment', 'Completed', 'Cancelled'];
+    if (!status || !validStatuses.includes(status)) {
+      return res.status(400).json({ message: 'Invalid status. Must be one of: ' + validStatuses.join(', ') });
+    }
+
+    const order = await Order.findById(req.params.id)
+      .populate('userId', '_id fullName email')
+      .populate('printerId', '_id name shop status availablePaperSizes');
 
     if (!order) {
       return res.status(404).json({ message: 'Order not found' });
@@ -171,6 +180,13 @@ router.put('/update-order-status/:id', protect, async (req, res) => {
     }
 
     const oldStatus = order.status;
+    
+    // Don't update if status is the same
+    if (oldStatus === status) {
+      return res.json({ message: 'Order status is already ' + status, order });
+    }
+
+    // Update order status
     order.status = status;
 
     // Get printer ID (handle both populated and unpopulated cases)
@@ -180,152 +196,156 @@ router.put('/update-order-status/:id', protect, async (req, res) => {
       return res.status(400).json({ message: 'Order printer information is missing' });
     }
 
+    // Set completedAt if status is Completed
     if (status === 'Completed') {
       order.completedAt = new Date();
     }
 
+    // Reset queue position if status is not In Queue
+    if (status !== 'In Queue') {
+      order.queuePosition = 0;
+    }
+
     // Save order first before recalculating queue count
-    await order.save();
-
-    // Update printer queue count based on status change
-    // Queue count should only include orders with status "In Queue"
-    if (oldStatus !== status) {
-      // Recalculate actual queue count after order status change
-      // This ensures accuracy regardless of what the status change was
-      const actualQueueCount = await Order.countDocuments({
-        printerId: printerId,
-        status: 'In Queue'
-      });
-      
-      // Update printer with accurate queue count
-      const updatedPrinter = await Printer.findByIdAndUpdate(
-        printerId, 
-        { queueCount: actualQueueCount }, 
-        { new: true }
-      );
-      
-      if (updatedPrinter) {
-        const io = req.app.get('io');
-        const printerData = updatedPrinter.toObject ? updatedPrinter.toObject() : updatedPrinter;
-        io.emit('printer_updated', printerData);
-      }
-    }
-
-    // If order status changed to something other than "In Queue", remove its queue position
-    if (oldStatus !== status && status !== 'In Queue') {
-      await Order.findByIdAndUpdate(order._id, { queuePosition: 0 });
-    }
-
-    // Optimize queue position recalculation using bulk operations
-    // Only recalculate if order status changed to/from "In Queue"
-    if (oldStatus !== status && (oldStatus === 'In Queue' || status === 'In Queue')) {
-      const io = req.app.get('io');
-      
-      // Use aggregation to calculate queue positions efficiently
-      const affectedOrders = await Order.find({
-        printerId: printerId,
-        status: 'In Queue'
-      }).select('_id userId createdAt').lean().sort({ createdAt: 1 });
-
-      // Calculate queue positions in a single pass
-      const updateOps = affectedOrders.map((affectedOrder, index) => {
-        const queuePosition = index + 1;
-        return {
-          updateOne: {
-            filter: { _id: affectedOrder._id },
-            update: { $set: { queuePosition } }
-          }
-        };
-      });
-
-      // Bulk update all queue positions at once
-      if (updateOps.length > 0) {
-        await Order.bulkWrite(updateOps);
-        
-        // Emit updates to users (non-blocking)
-        if (io) {
-          setImmediate(() => {
-            affectedOrders.forEach((affectedOrder, index) => {
-              if (affectedOrder.userId) {
-                io.to(affectedOrder.userId.toString()).emit('order_queue_updated', {
-                  orderId: affectedOrder._id,
-                  queuePosition: index + 1
-                });
-              }
-            });
-          });
-        }
-      }
-    }
-
-    // Create notification for user
-    // Ensure userId is properly accessed (handle both populated and unpopulated cases)
-    const userId = order.userId?._id || order.userId;
-    if (!userId) {
-      console.error('Order userId is missing:', order._id);
-      return res.status(400).json({ message: 'Order user information is missing' });
-    }
-
-    let notificationMessage = '';
-    if (status === 'In Queue') notificationMessage = `Your order #${order.orderNumber} is in queue.`;
-    if (status === 'Printing') notificationMessage = `Your order #${order.orderNumber} is now being printed.`;
-    if (status === 'Ready for Pickup') notificationMessage = `Your order #${order.orderNumber} is ready for pickup!`;
-    if (status === 'Ready for Pickup & Payment') notificationMessage = `Your order #${order.orderNumber} is ready for pickup and payment!`;
-    if (status === 'Completed') notificationMessage = `Your order #${order.orderNumber} has been completed.`;
-
     try {
-      await Notification.create({
-        userId: userId,
-        title: 'Order Status Updated',
-        message: notificationMessage,
-        type: 'order_update',
-        relatedOrderId: order._id
-      });
-    } catch (notifError) {
-      console.error('Error creating notification:', notifError);
-      // Continue even if notification creation fails
+      await order.save();
+    } catch (saveError) {
+      console.error('Error saving order status:', saveError);
+      return res.status(500).json({ message: 'Failed to update order status', error: saveError.message });
     }
 
-    // Populate order before emitting and sending emails
-    const populatedOrderForEmit = await Order.findById(order._id)
-      .populate('userId', 'fullName email')
-      .populate('printerId');
+    // Send response immediately after saving
+    res.json({ message: 'Order status updated successfully', order });
 
-    // Get user info from populated order (fallback to original order if population failed)
-    const userEmail = populatedOrderForEmit?.userId?.email || order.userId?.email;
-    const userFullName = populatedOrderForEmit?.userId?.fullName || order.userId?.fullName;
-    const populatedUserId = populatedOrderForEmit?.userId?._id || populatedOrderForEmit?.userId || userId;
-
-    // Send email notifications for order status changes (non-blocking)
-    if (userEmail && userFullName) {
-      if (status === 'Printing') {
-        sendOrderPrintingEmail(userEmail, userFullName, order.orderNumber, order.shop).catch(emailError => {
-          console.error('Error sending printing email:', emailError.message || emailError);
-        });
-      } else if (status === 'Ready for Pickup' || status === 'Ready for Pickup & Payment') {
-        sendOrderReadyEmail(userEmail, userFullName, order.orderNumber, order.shop).catch(emailError => {
-          console.error('Error sending ready email:', emailError.message || emailError);
-        });
-      }
-    }
-
-    // Send response immediately
-    res.json({ message: 'Order status updated successfully', order: populatedOrderForEmit || order });
-
-    // Emit socket events after response is sent (non-blocking)
+    // Get userId for async operations
+    const userId = order.userId?._id || order.userId;
     const io = req.app.get('io');
-    if (io) {
-      setImmediate(() => {
-        try {
-          if (populatedUserId) {
-            io.to(populatedUserId.toString()).emit('order_updated', populatedOrderForEmit || order);
+
+    // All async operations happen in the background (non-blocking)
+    setImmediate(async () => {
+      try {
+        // Update printer queue count based on status change
+        // Queue count should only include orders with status "In Queue"
+        if (oldStatus !== status) {
+          // Recalculate actual queue count after order status change
+          const actualQueueCount = await Order.countDocuments({
+            printerId: printerId,
+            status: 'In Queue'
+          });
+          
+          // Update printer with accurate queue count
+          const updatedPrinter = await Printer.findByIdAndUpdate(
+            printerId, 
+            { queueCount: actualQueueCount }, 
+            { new: true }
+          ).lean();
+          
+          if (updatedPrinter && io) {
+            io.emit('printer_updated', updatedPrinter);
           }
-          io.to(`${order.shop}_admins`).emit('order_updated', populatedOrderForEmit || order);
-        } catch (socketError) {
-          console.error('Error emitting socket events:', socketError);
         }
-      });
-    }
+
+        // Optimize queue position recalculation using bulk operations
+        // Only recalculate if order status changed to/from "In Queue"
+        if (oldStatus !== status && (oldStatus === 'In Queue' || status === 'In Queue')) {
+          // Use aggregation to calculate queue positions efficiently
+          const affectedOrders = await Order.find({
+            printerId: printerId,
+            status: 'In Queue'
+          }).select('_id userId createdAt').lean().sort({ createdAt: 1 });
+
+          // Calculate queue positions in a single pass
+          const updateOps = affectedOrders.map((affectedOrder, index) => {
+            const queuePosition = index + 1;
+            return {
+              updateOne: {
+                filter: { _id: affectedOrder._id },
+                update: { $set: { queuePosition } }
+              }
+            };
+          });
+
+          // Bulk update all queue positions at once
+          if (updateOps.length > 0) {
+            await Order.bulkWrite(updateOps);
+            
+            // Emit updates to users
+            if (io) {
+              affectedOrders.forEach((affectedOrder, index) => {
+                if (affectedOrder.userId) {
+                  io.to(affectedOrder.userId.toString()).emit('order_queue_updated', {
+                    orderId: affectedOrder._id,
+                    queuePosition: index + 1
+                  });
+                }
+              });
+            }
+          }
+        }
+
+        // Create notification for user
+        if (userId) {
+          let notificationMessage = '';
+          if (status === 'In Queue') notificationMessage = `Your order #${order.orderNumber} is in queue.`;
+          if (status === 'Printing') notificationMessage = `Your order #${order.orderNumber} is now being printed.`;
+          if (status === 'Ready for Pickup') notificationMessage = `Your order #${order.orderNumber} is ready for pickup!`;
+          if (status === 'Ready for Pickup & Payment') notificationMessage = `Your order #${order.orderNumber} is ready for pickup and payment!`;
+          if (status === 'Completed') notificationMessage = `Your order #${order.orderNumber} has been completed.`;
+          if (status === 'Cancelled') notificationMessage = `Your order #${order.orderNumber} has been cancelled.`;
+
+          try {
+            await Notification.create({
+              userId: userId,
+              title: 'Order Status Updated',
+              message: notificationMessage,
+              type: 'order_update',
+              relatedOrderId: order._id
+            });
+          } catch (notifError) {
+            console.error('Error creating notification:', notifError);
+            // Continue even if notification creation fails
+          }
+        }
+
+        // Populate order before emitting and sending emails
+        const populatedOrderForEmit = await Order.findById(order._id)
+          .populate('userId', 'fullName email')
+          .populate('printerId');
+
+        // Get user info from populated order (fallback to original order if population failed)
+        const userEmail = populatedOrderForEmit?.userId?.email || order.userId?.email;
+        const userFullName = populatedOrderForEmit?.userId?.fullName || order.userId?.fullName;
+        const populatedUserId = populatedOrderForEmit?.userId?._id || populatedOrderForEmit?.userId || userId;
+
+        // Send email notifications for order status changes (non-blocking)
+        if (userEmail && userFullName) {
+          if (status === 'Printing') {
+            sendOrderPrintingEmail(userEmail, userFullName, order.orderNumber, order.shop).catch(emailError => {
+              console.error('Error sending printing email:', emailError.message || emailError);
+            });
+          } else if (status === 'Ready for Pickup' || status === 'Ready for Pickup & Payment') {
+            sendOrderReadyEmail(userEmail, userFullName, order.orderNumber, order.shop).catch(emailError => {
+              console.error('Error sending ready email:', emailError.message || emailError);
+            });
+          }
+        }
+
+        // Emit socket events
+        if (io) {
+          try {
+            if (populatedUserId) {
+              io.to(populatedUserId.toString()).emit('order_updated', populatedOrderForEmit || order);
+            }
+            io.to(`${order.shop}_admins`).emit('order_updated', populatedOrderForEmit || order);
+          } catch (socketError) {
+            console.error('Error emitting socket events:', socketError);
+          }
+        }
+      } catch (asyncError) {
+        console.error('Error in async operations for order status update:', asyncError);
+        // Don't throw - these are background operations
+      }
+    });
   } catch (error) {
     res.status(500).json({ message: 'Server error', error: error.message });
   }

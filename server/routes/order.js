@@ -351,7 +351,8 @@ router.get('/my-orders', protect, async (req, res) => {
 router.put('/cancel/:id', protect, async (req, res) => {
   try {
     const order = await Order.findById(req.params.id)
-      .populate('userId', 'fullName');
+      .populate('userId', '_id fullName')
+      .populate('printerId', '_id');
 
     if (!order) {
       return res.status(404).json({ message: 'Order not found' });
@@ -361,6 +362,7 @@ router.put('/cancel/:id', protect, async (req, res) => {
     // Handle both populated and non-populated userId
     const orderUserId = order.userId?._id || order.userId;
     if (!orderUserId) {
+      console.error('Order userId is missing:', order._id);
       return res.status(400).json({ message: 'Order user information is missing' });
     }
     
@@ -368,20 +370,40 @@ router.put('/cancel/:id', protect, async (req, res) => {
       return res.status(403).json({ message: 'Not authorized to cancel this order' });
     }
 
+    // Can't cancel if already cancelled
+    if (order.status === 'Cancelled') {
+      return res.status(400).json({ message: 'Order is already cancelled' });
+    }
+
     // Can't cancel if already printing or completed
     if (['Printing', 'Ready for Pickup', 'Ready for Pickup & Payment', 'Completed'].includes(order.status)) {
       return res.status(400).json({ message: 'Cannot cancel order at this stage' });
     }
 
+    // Update order status
     order.status = 'Cancelled';
-    await order.save();
+    order.queuePosition = 0; // Reset queue position when cancelled
+    
+    try {
+      await order.save();
+    } catch (saveError) {
+      console.error('Error saving cancelled order:', saveError);
+      return res.status(500).json({ message: 'Failed to cancel order', error: saveError.message });
+    }
 
-    // Send response immediately before async operations
-    res.json({ message: 'Order cancelled successfully', order });
-
+    // Store user ID and order details for async operations
+    const userId = req.user._id.toString();
+    const orderId = order._id.toString();
+    const orderNumber = order.orderNumber;
+    const orderShop = order.shop;
+    const userFullName = order.userId?.fullName || 'a student';
+    
     // Get printer ID (handle both ObjectId and populated object)
     const printerId = order.printerId?._id || order.printerId;
     const io = req.app.get('io');
+
+    // Send response immediately before async operations
+    res.json({ message: 'Order cancelled successfully', order });
 
     // All async operations happen in the background (non-blocking)
     setImmediate(async () => {
@@ -447,11 +469,11 @@ router.put('/cancel/:id', protect, async (req, res) => {
       // Create notification for user
       try {
         await Notification.create({
-          userId: req.user._id,
+          userId: userId,
           title: 'Order Cancelled',
-          message: `Your order #${order.orderNumber} has been cancelled.`,
+          message: `Your order #${orderNumber} has been cancelled.`,
           type: 'order_update',
-          relatedOrderId: order._id
+          relatedOrderId: orderId
         });
       } catch (notifError) {
         console.error('Error creating user notification:', notifError);
@@ -460,16 +482,16 @@ router.put('/cancel/:id', protect, async (req, res) => {
 
       // Create notifications for all admins of this shop
       try {
-        const adminRole = order.shop === 'IT' ? 'it_admin' : 'ssc_admin';
+        const adminRole = orderShop === 'IT' ? 'it_admin' : 'ssc_admin';
         const admins = await User.find({ role: adminRole }).select('_id').lean();
         
         if (admins.length > 0) {
           const adminNotifications = admins.map(admin => ({
             userId: admin._id,
             title: 'Order Cancelled',
-            message: `Order #${order.orderNumber} from ${order.userId?.fullName || 'a student'} has been cancelled.`,
+            message: `Order #${orderNumber} from ${userFullName} has been cancelled.`,
             type: 'order_cancelled',
-            relatedOrderId: order._id
+            relatedOrderId: orderId
           }));
           
           await Notification.insertMany(adminNotifications);
@@ -482,13 +504,13 @@ router.put('/cancel/:id', protect, async (req, res) => {
       // Populate order and emit socket events
       if (io) {
         try {
-          const populatedCancelledOrder = await Order.findById(order._id)
+          const populatedCancelledOrder = await Order.findById(orderId)
             .populate('userId', 'fullName email')
             .populate('printerId');
           
-          io.to(req.user._id.toString()).emit('order_cancelled', populatedCancelledOrder || order);
-          io.to(`${order.shop}_admins`).emit('order_cancelled', populatedCancelledOrder || order);
-          io.to(`${order.shop}_admins`).emit('notification', { type: 'order_cancelled' });
+          io.to(userId).emit('order_cancelled', populatedCancelledOrder || order);
+          io.to(`${orderShop}_admins`).emit('order_cancelled', populatedCancelledOrder || order);
+          io.to(`${orderShop}_admins`).emit('notification', { type: 'order_cancelled' });
         } catch (socketError) {
           console.error('Error emitting socket events:', socketError);
           // Continue even if socket emission fails

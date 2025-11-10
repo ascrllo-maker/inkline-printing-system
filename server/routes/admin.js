@@ -28,7 +28,29 @@ router.get('/pending-accounts', protect, adminOnly('IT'), async (req, res) => {
       accountStatus: 'pending'
     }).select('-password').sort({ createdAt: -1 });
 
-    res.json(pendingAccounts);
+    // Convert ID image paths to API URLs that can be accessed
+    const accountsWithImageUrls = pendingAccounts.map(account => {
+      const accountObj = account.toObject();
+      
+      // If account has GridFS ID, use GridFS endpoint
+      if (accountObj.idImageGridFSId) {
+        accountObj.idImage = `/api/admin/id-image/${accountObj.idImageGridFSId}`;
+      } else if (accountObj.idImage) {
+        // Legacy: if it's a filesystem path, convert to API endpoint
+        // Extract filename from path (e.g., /uploads/ids/filename.jpg -> filename.jpg)
+        const pathParts = accountObj.idImage.split('/');
+        const filename = pathParts[pathParts.length - 1];
+        if (filename) {
+          accountObj.idImage = `/api/admin/id-image/file/${filename}`;
+        } else {
+          accountObj.idImage = null;
+        }
+      }
+      
+      return accountObj;
+    });
+
+    res.json(accountsWithImageUrls);
   } catch (error) {
     res.status(500).json({ message: 'Server error', error: error.message });
   }
@@ -902,6 +924,150 @@ router.put('/settle-violation/:id', protect, async (req, res) => {
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
+
+// @route   GET /api/admin/id-image/:fileId
+// @desc    Serve ID image with authentication (for admin viewing)
+// @access  Private (Admin only - IT Admin)
+router.get('/id-image/:fileId', protect, async (req, res) => {
+  try {
+    // Check if user is IT admin
+    if (req.user.role !== 'it_admin') {
+      return res.status(403).json({ message: 'Access denied: IT admin required' });
+    }
+
+    const fileId = req.params.fileId;
+    
+    console.log('ID image request received:', fileId);
+    
+    if (!fileId) {
+      return res.status(400).json({ message: 'File ID is required' });
+    }
+
+    // Check if this is a GridFS file ID
+    if (mongoose.Types.ObjectId.isValid(fileId)) {
+      try {
+        const gridFSBucket = new GridFSBucket(mongoose.connection.db, { bucketName: 'uploads' });
+        const objectId = new mongoose.Types.ObjectId(fileId);
+        
+        console.log('Looking for ID image in GridFS with ID:', objectId.toString());
+        
+        // Find file metadata
+        const files = await gridFSBucket.find({ _id: objectId, 'metadata.fileType': 'id_image' }).toArray();
+        
+        if (files.length === 0) {
+          console.error('ID image not found in GridFS with ID:', objectId.toString());
+          return res.status(404).json({ 
+            message: 'ID image not found',
+            fileId: objectId.toString()
+          });
+        }
+
+        const file = files[0];
+        
+        console.log('ID image found in GridFS:', {
+          fileId: file._id.toString(),
+          filename: file.filename,
+          size: file.length,
+          mimetype: file.metadata?.mimetype
+        });
+
+        // Determine content type
+        const contentType = file.metadata?.mimetype || file.contentType || 'image/jpeg';
+        
+        // Set headers
+        res.setHeader('Content-Type', contentType);
+        res.setHeader('Content-Length', file.length.toString());
+        res.setHeader('Cache-Control', 'private, max-age=3600');
+        res.setHeader('Content-Disposition', `inline; filename="${encodeURIComponent(file.metadata?.originalName || file.filename)}"`);
+
+        // Stream file from GridFS
+        const downloadStream = gridFSBucket.openDownloadStream(objectId);
+        
+        downloadStream.on('error', (error) => {
+          console.error('Error streaming ID image from GridFS:', error);
+          if (!res.headersSent) {
+            res.status(500).json({ message: 'Error streaming file', error: error.message });
+          }
+        });
+
+        downloadStream.on('end', () => {
+          console.log('ID image stream ended successfully');
+        });
+
+        // Pipe file stream to response
+        downloadStream.pipe(res);
+        
+        return; // Exit early since we're streaming
+      } catch (gridfsError) {
+        console.error('Error retrieving ID image from GridFS:', gridfsError);
+        return res.status(500).json({ message: 'Error retrieving ID image', error: gridfsError.message });
+      }
+    }
+
+    // If not a valid ObjectId, treat as filename (legacy support)
+    return res.status(400).json({ message: 'Invalid file ID format' });
+  } catch (error) {
+    console.error('Error serving ID image:', error);
+    res.status(500).json({ message: 'Server error', error: error.message });
+  }
+});
+
+// @route   GET /api/admin/id-image/file/:filename
+// @desc    Serve ID image from filesystem (legacy support)
+// @access  Private (Admin only - IT Admin)
+router.get('/id-image/file/:filename', protect, async (req, res) => {
+  try {
+    // Check if user is IT admin
+    if (req.user.role !== 'it_admin') {
+      return res.status(403).json({ message: 'Access denied: IT admin required' });
+    }
+
+    const filename = req.params.filename;
+    const fs = await import('fs');
+    const path = await import('path');
+    const mime = await import('mime-types');
+    
+    // Security: prevent directory traversal
+    const safeFilename = path.default.basename(filename);
+    const filePath = path.default.join(__dirname, '../../uploads/ids', safeFilename);
+    
+    // Verify the file is within the uploads/ids directory
+    const idsDir = path.default.join(__dirname, '../../uploads/ids');
+    if (!filePath.startsWith(idsDir)) {
+      return res.status(400).json({ message: 'Invalid file path' });
+    }
+    
+    // Check if file exists
+    if (!fs.default.existsSync(filePath)) {
+      console.error('ID image file not found:', filePath);
+      return res.status(404).json({ message: 'ID image file not found' });
+    }
+    
+    // Determine content type
+    const contentType = mime.default.lookup(filePath) || 'image/jpeg';
+    const fileStats = fs.default.statSync(filePath);
+    
+    // Set headers
+    res.setHeader('Content-Type', contentType);
+    res.setHeader('Content-Length', fileStats.size.toString());
+    res.setHeader('Cache-Control', 'private, max-age=3600');
+    res.setHeader('Content-Disposition', `inline; filename="${encodeURIComponent(safeFilename)}"`);
+    
+    // Stream file
+    const fileStream = fs.default.createReadStream(filePath);
+    fileStream.pipe(res);
+    
+    fileStream.on('error', (error) => {
+      console.error('Error streaming ID image file:', error);
+      if (!res.headersSent) {
+        res.status(500).json({ message: 'Error streaming file', error: error.message });
+      }
+    });
+  } catch (error) {
+    console.error('Error serving ID image file:', error);
+    res.status(500).json({ message: 'Server error', error: error.message });
+  }
+});
 
 // @route   GET /api/admin/file/:filePath
 // @desc    Serve file with authentication (for admin viewing)

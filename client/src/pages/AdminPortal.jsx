@@ -1402,9 +1402,13 @@ export default function AdminPortal({ shop }) {
                             <div className="mt-4">
                               <p className="text-sm font-medium text-white mb-2">DVC School ID:</p>
                               <img
-                                src={account.idImage}
-                                alt="ID"
+                                src={account.idImage.startsWith('/api/') ? account.idImage : `/api${account.idImage}`}
+                                alt="School ID"
                                 className="max-w-md rounded-lg border border-white/30"
+                                onError={(e) => {
+                                  console.error('Error loading ID image:', account.idImage);
+                                  e.target.style.display = 'none';
+                                }}
                               />
                             </div>
                           )}

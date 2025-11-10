@@ -23,7 +23,11 @@ const userSchema = new mongoose.Schema({
     default: false
   },
   idImage: {
-    type: String, // Path to uploaded ID image
+    type: String, // Path to uploaded ID image (legacy - for backward compatibility)
+    default: null
+  },
+  idImageGridFSId: {
+    type: mongoose.Schema.Types.ObjectId, // GridFS file ID for ID image
     default: null
   },
   accountStatus: {

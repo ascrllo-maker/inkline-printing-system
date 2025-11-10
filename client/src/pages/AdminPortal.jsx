@@ -1,8 +1,8 @@
 import { useState, useEffect, useRef, useMemo, useCallback } from 'react';
 import { useAuth } from '../context/AuthContext';
-import { adminAPI, printerAPI, notificationAPI } from '../services/api';
+import { adminAPI, printerAPI, notificationAPI, adminPricingAPI } from '../services/api';
 import { connectSocket, disconnectSocket, joinAdminRoom, leaveAdminRoom, getSocket } from '../services/socket';
-import { Printer, Bell, LogOut, FileText, Users, AlertTriangle, CheckCircle, XCircle, Plus, Download, Ban, Unlock, X, Trash2 } from 'lucide-react';
+import { Printer, Bell, LogOut, FileText, Users, AlertTriangle, CheckCircle, XCircle, Plus, Download, Ban, Unlock, X, Trash2, DollarSign, Save } from 'lucide-react';
 import toast from 'react-hot-toast';
 
 export default function AdminPortal({ shop }) {
@@ -16,11 +16,14 @@ export default function AdminPortal({ shop }) {
   const [pendingAccounts, setPendingAccounts] = useState([]);
   const [violations, setViolations] = useState([]);
   const [notifications, setNotifications] = useState([]);
+  const [pricing, setPricing] = useState([]);
   const [showNotifications, setShowNotifications] = useState(false);
   const [showCreatePrinter, setShowCreatePrinter] = useState(false);
   const [editingPrinter, setEditingPrinter] = useState(null);
   const [loading, setLoading] = useState(false);
   const [tabLoading, setTabLoading] = useState(false);
+  const [pricingLoading, setPricingLoading] = useState(false);
+  const [editingPricing, setEditingPricing] = useState({});
 
   const [printerForm, setPrinterForm] = useState({
     name: '',
@@ -37,6 +40,7 @@ export default function AdminPortal({ shop }) {
     ...(isITAdmin ? [{ id: 'APPROVE ACCOUNTS', label: 'APPROVE ACCOUNTS', icon: Users }] : []),
     { id: 'STUDENT USERS', label: 'STUDENT USERS', icon: Users },
     { id: 'PRINTERS', label: 'PRINTERS', icon: Printer },
+    { id: 'PRICING', label: 'PRICING', icon: DollarSign },
   ];
 
   // Update ref whenever activeTab changes
@@ -57,6 +61,8 @@ export default function AdminPortal({ shop }) {
       setPendingAccounts([]);
     } else if (activeTab === 'USER VIOLATIONS') {
       setViolations([]);
+    } else if (activeTab === 'PRICING') {
+      setPricing([]);
     }
     
     // Set loading state
@@ -580,6 +586,23 @@ export default function AdminPortal({ shop }) {
       }
     });
 
+    // Listen for pricing updates
+    socket.on('pricing_updated', (data) => {
+      if (data && data.shop === shop) {
+        // Update pricing if on the pricing tab
+        if (activeTabRef.current === 'PRICING') {
+          setPricing(data.pricing || []);
+          // Update editing pricing state
+          const pricingMap = {};
+          (data.pricing || []).forEach(item => {
+            const key = `${item.paperSize}-${item.colorType}`;
+            pricingMap[key] = item.pricePerCopy;
+          });
+          setEditingPricing(pricingMap);
+        }
+      }
+    });
+
     return () => {
       leaveAdminRoom(shop);
       socket.off('new_order');
@@ -591,6 +614,7 @@ export default function AdminPortal({ shop }) {
       socket.off('notification');
       socket.off('violation_created');
       socket.off('violation_settled');
+      socket.off('pricing_updated');
       if (isITAdmin) {
         socket.off('account_approved');
         socket.off('new_pending_account');
@@ -643,6 +667,18 @@ export default function AdminPortal({ shop }) {
         const res = await adminAPI.getViolations(shop);
         if (activeTabRef.current === 'USER VIOLATIONS') {
           setViolations(res.data);
+        }
+      } else if (currentTab === 'PRICING') {
+        const res = await adminPricingAPI.getPricing(shop);
+        if (activeTabRef.current === 'PRICING') {
+          setPricing(res.data);
+          // Initialize editing pricing state
+          const pricingMap = {};
+          res.data.forEach(item => {
+            const key = `${item.paperSize}-${item.colorType}`;
+            pricingMap[key] = item.pricePerCopy;
+          });
+          setEditingPricing(pricingMap);
         }
       }
     } catch (error) {
@@ -830,6 +866,57 @@ export default function AdminPortal({ shop }) {
       toast.error('Failed to send follow-up violation warning');
     }
   };
+
+  // Get all unique paper sizes from printers
+  const getAllPaperSizes = useMemo(() => {
+    const sizes = new Set();
+    printers.forEach(printer => {
+      if (printer.availablePaperSizes && Array.isArray(printer.availablePaperSizes)) {
+        printer.availablePaperSizes.forEach(ps => {
+          if (ps.enabled) {
+            sizes.add(ps.size);
+          }
+        });
+      }
+    });
+    return Array.from(sizes).sort();
+  }, [printers]);
+
+  // Handle pricing update
+  const handlePricingChange = useCallback((paperSize, colorType, value) => {
+    const key = `${paperSize}-${colorType}`;
+    setEditingPricing(prev => ({
+      ...prev,
+      [key]: parseFloat(value) || 0
+    }));
+  }, []);
+
+  // Save pricing
+  const handleSavePricing = useCallback(async () => {
+    try {
+      setPricingLoading(true);
+      
+      // Convert editingPricing to array format
+      const pricingArray = getAllPaperSizes.flatMap(paperSize => 
+        ['Black and White', 'Colored'].map(colorType => {
+          const key = `${paperSize}-${colorType}`;
+          return {
+            paperSize,
+            colorType,
+            pricePerCopy: editingPricing[key] || 0
+          };
+        })
+      );
+
+      await adminPricingAPI.updatePricing(shop, pricingArray);
+      toast.success('Pricing updated successfully');
+      loadData();
+    } catch (error) {
+      toast.error('Failed to update pricing');
+    } finally {
+      setPricingLoading(false);
+    }
+  }, [shop, editingPricing, getAllPaperSizes, loadData]);
 
   // Memoize status color function
   const getStatusColor = useCallback((status) => {
@@ -1106,6 +1193,11 @@ export default function AdminPortal({ shop }) {
                                 <div className="text-sm text-white">
                                   <div>{order.paperSize} • {order.orientation}</div>
                                   <div className="text-white/80">{order.colorType} • {order.copies} copies</div>
+                                  {order.totalPrice && (
+                                    <div className="text-white/90 font-semibold mt-1">
+                                      Total: ₱{order.totalPrice.toFixed(2)}
+                                    </div>
+                                  )}
                                 </div>
                               </td>
                               <td className="px-6 py-4 whitespace-nowrap">
@@ -1179,6 +1271,13 @@ export default function AdminPortal({ shop }) {
                             <span>•</span>
                             <span>{order.copies} copies</span>
                           </div>
+                          {order.totalPrice && (
+                            <div className="mt-2">
+                              <p className="text-sm font-semibold text-white">
+                                Total: ₱{order.totalPrice.toFixed(2)}
+                              </p>
+                            </div>
+                          )}
                         </div>
                         <span className="px-3 py-1 rounded-full text-xs font-medium bg-green-300/80 text-green-900">
                           Completed
@@ -1544,6 +1643,81 @@ export default function AdminPortal({ shop }) {
                       ))}
                     </tbody>
                   </table>
+                </div>
+              )}
+            </div>
+          )}
+
+          {/* PRICING Tab */}
+          {activeTab === 'PRICING' && !tabLoading && (
+            <div>
+              <div className="flex justify-between items-center mb-4">
+                <h2 className="text-2xl font-bold text-white drop-shadow-md">Pricing Management</h2>
+                <button
+                  onClick={handleSavePricing}
+                  disabled={pricingLoading}
+                  className="glass-button flex items-center space-x-2 text-white px-4 py-2 rounded-lg disabled:opacity-50 disabled:cursor-not-allowed"
+                >
+                  <Save className="w-5 h-5" />
+                  <span>{pricingLoading ? 'Saving...' : 'Save Pricing'}</span>
+                </button>
+              </div>
+
+              {getAllPaperSizes.length === 0 ? (
+                <div className="text-center py-12 glass-card rounded-lg">
+                  <DollarSign className="w-12 h-12 text-white/60 mx-auto mb-4" />
+                  <p className="text-white/90">No printers with paper sizes found. Please add printers first.</p>
+                </div>
+              ) : (
+                <div className="glass-card rounded-lg overflow-hidden">
+                  <div className="overflow-x-auto">
+                    <table className="min-w-full divide-y divide-white/20">
+                      <thead className="glass">
+                        <tr>
+                          <th className="px-6 py-3 text-left text-xs font-medium text-white uppercase">Paper Size</th>
+                          <th className="px-6 py-3 text-left text-xs font-medium text-white uppercase">Black and White (₱ per copy)</th>
+                          <th className="px-6 py-3 text-left text-xs font-medium text-white uppercase">Colored (₱ per copy)</th>
+                        </tr>
+                      </thead>
+                      <tbody className="divide-y divide-white/20">
+                        {getAllPaperSizes.map((paperSize) => (
+                          <tr key={paperSize} className="hover:bg-white/10 transition-colors">
+                            <td className="px-6 py-4 whitespace-nowrap text-sm font-medium text-white">
+                              {paperSize}
+                            </td>
+                            <td className="px-6 py-4">
+                              <div className="flex items-center space-x-2">
+                                <span className="text-white/80">₱</span>
+                                <input
+                                  type="number"
+                                  min="0"
+                                  step="0.01"
+                                  value={editingPricing[`${paperSize}-Black and White`] || ''}
+                                  onChange={(e) => handlePricingChange(paperSize, 'Black and White', e.target.value)}
+                                  className="glass-input w-32 border border-white/20 rounded-lg px-3 py-2 text-white placeholder-white/50 backdrop-blur-md bg-white/10 focus:bg-white/15 transition-colors"
+                                  placeholder="0.00"
+                                />
+                              </div>
+                            </td>
+                            <td className="px-6 py-4">
+                              <div className="flex items-center space-x-2">
+                                <span className="text-white/80">₱</span>
+                                <input
+                                  type="number"
+                                  min="0"
+                                  step="0.01"
+                                  value={editingPricing[`${paperSize}-Colored`] || ''}
+                                  onChange={(e) => handlePricingChange(paperSize, 'Colored', e.target.value)}
+                                  className="glass-input w-32 border border-white/20 rounded-lg px-3 py-2 text-white placeholder-white/50 backdrop-blur-md bg-white/10 focus:bg-white/15 transition-colors"
+                                  placeholder="0.00"
+                                />
+                              </div>
+                            </td>
+                          </tr>
+                        ))}
+                      </tbody>
+                    </table>
+                  </div>
                 </div>
               )}
             </div>

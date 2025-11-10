@@ -55,6 +55,16 @@ const orderSchema = new mongoose.Schema({
     required: true,
     min: 1
   },
+  pricePerCopy: {
+    type: Number,
+    required: true,
+    min: 0
+  },
+  totalPrice: {
+    type: Number,
+    required: true,
+    min: 0
+  },
   status: {
     type: String,
     enum: ['In Queue', 'Printing', 'Ready for Pickup', 'Ready for Pickup & Payment', 'Completed', 'Cancelled'],

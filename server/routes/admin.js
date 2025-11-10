@@ -4,6 +4,7 @@ import Order from '../models/Order.js';
 import Printer from '../models/Printer.js';
 import Notification from '../models/Notification.js';
 import Violation from '../models/Violation.js';
+import Pricing from '../models/Pricing.js';
 import { protect, adminOnly } from '../middleware/auth.js';
 import { sendAccountApprovedEmail, sendOrderReadyEmail, sendOrderPrintingEmail, sendViolationWarningEmail, sendViolationSettledEmail, sendBanNotificationEmail, sendUnbanNotificationEmail } from '../utils/email.js';
 import path from 'path';
@@ -1234,6 +1235,120 @@ router.get('/file/*', protect, async (req, res) => {
 
   } catch (error) {
     console.error('Error serving file:', error);
+    res.status(500).json({ message: 'Server error', error: error.message });
+  }
+});
+
+// ==================== PRICING MANAGEMENT ====================
+
+// @route   GET /api/admin/pricing/:shop
+// @desc    Get all pricing for a specific shop
+// @access  Private (Admin only)
+router.get('/pricing/:shop', protect, async (req, res) => {
+  try {
+    const { shop } = req.params;
+    
+    // Check admin permission
+    if (shop === 'IT' && req.user.role !== 'it_admin') {
+      return res.status(403).json({ message: 'Access denied' });
+    }
+    if (shop === 'SSC' && req.user.role !== 'ssc_admin') {
+      return res.status(403).json({ message: 'Access denied' });
+    }
+
+    if (!['IT', 'SSC'].includes(shop)) {
+      return res.status(400).json({ message: 'Invalid shop name' });
+    }
+
+    // Get all pricing for this shop
+    const pricing = await Pricing.find({ shop })
+      .select('shop paperSize colorType pricePerCopy updatedAt updatedBy')
+      .lean()
+      .sort({ paperSize: 1, colorType: 1 });
+
+    res.json(pricing);
+  } catch (error) {
+    res.status(500).json({ message: 'Server error', error: error.message });
+  }
+});
+
+// @route   PUT /api/admin/pricing/:shop
+// @desc    Update pricing for a specific shop (bulk update)
+// @access  Private (Admin only)
+router.put('/pricing/:shop', protect, async (req, res) => {
+  try {
+    const { shop } = req.params;
+    const { pricing } = req.body; // Array of { paperSize, colorType, pricePerCopy }
+    
+    // Check admin permission
+    if (shop === 'IT' && req.user.role !== 'it_admin') {
+      return res.status(403).json({ message: 'Access denied' });
+    }
+    if (shop === 'SSC' && req.user.role !== 'ssc_admin') {
+      return res.status(403).json({ message: 'Access denied' });
+    }
+
+    if (!['IT', 'SSC'].includes(shop)) {
+      return res.status(400).json({ message: 'Invalid shop name' });
+    }
+
+    if (!Array.isArray(pricing)) {
+      return res.status(400).json({ message: 'Pricing must be an array' });
+    }
+
+    // Validate pricing data
+    for (const item of pricing) {
+      if (!item.paperSize || !item.colorType || typeof item.pricePerCopy !== 'number') {
+        return res.status(400).json({ message: 'Invalid pricing data. Each item must have paperSize, colorType, and pricePerCopy' });
+      }
+      if (item.pricePerCopy < 0) {
+        return res.status(400).json({ message: 'Price per copy must be non-negative' });
+      }
+      if (!['Black and White', 'Colored'].includes(item.colorType)) {
+        return res.status(400).json({ message: 'Invalid color type' });
+      }
+    }
+
+    // Use bulk write for efficient updates/inserts
+    const bulkOps = pricing.map(item => ({
+      updateOne: {
+        filter: {
+          shop,
+          paperSize: item.paperSize,
+          colorType: item.colorType
+        },
+        update: {
+          $set: {
+            pricePerCopy: item.pricePerCopy,
+            updatedBy: req.user._id,
+            updatedAt: new Date()
+          },
+          $setOnInsert: {
+            shop,
+            paperSize: item.paperSize,
+            colorType: item.colorType
+          }
+        },
+        upsert: true
+      }
+    }));
+
+    await Pricing.bulkWrite(bulkOps);
+
+    // Get updated pricing
+    const updatedPricing = await Pricing.find({ shop })
+      .select('shop paperSize colorType pricePerCopy updatedAt updatedBy')
+      .lean()
+      .sort({ paperSize: 1, colorType: 1 });
+
+    // Emit socket event for real-time updates
+    const io = req.app.get('io');
+    if (io) {
+      io.emit('pricing_updated', { shop, pricing: updatedPricing });
+    }
+
+    res.json({ message: 'Pricing updated successfully', pricing: updatedPricing });
+  } catch (error) {
     res.status(500).json({ message: 'Server error', error: error.message });
   }
 });

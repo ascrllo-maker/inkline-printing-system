@@ -1,8 +1,8 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useMemo, useCallback } from 'react';
 import { useAuth } from '../context/AuthContext';
-import { printerAPI, orderAPI, notificationAPI } from '../services/api';
+import { printerAPI, orderAPI, notificationAPI, pricingAPI } from '../services/api';
 import { connectSocket, disconnectSocket, getSocket } from '../services/socket';
-import { Printer, Bell, ArrowLeft, LogOut, X } from 'lucide-react';
+import { Printer, Bell, ArrowLeft, LogOut, X, DollarSign } from 'lucide-react';
 import toast from 'react-hot-toast';
 
 export default function StudentPortal() {
@@ -16,6 +16,7 @@ export default function StudentPortal() {
   const [showNotifications, setShowNotifications] = useState(false);
   const [activeOrderTab, setActiveOrderTab] = useState('WAITING');
   const [loading, setLoading] = useState(false);
+  const [pricing, setPricing] = useState([]);
 
   const [orderForm, setOrderForm] = useState({
     printerId: '',
@@ -339,6 +340,13 @@ export default function StudentPortal() {
         loadNotifications();
       });
 
+      // Listen for pricing updates
+      socket.on('pricing_updated', (data) => {
+        if (data && data.shop === selectedShop) {
+          setPricing(data.pricing || []);
+        }
+      });
+
       return () => {
         socket.off('printer_updated');
         socket.off('printer_created');
@@ -353,6 +361,7 @@ export default function StudentPortal() {
         socket.off('user_banned');
         socket.off('user_unbanned');
         socket.off('notification');
+        socket.off('pricing_updated');
       };
   }, [user, selectedShop]);
 
@@ -365,9 +374,10 @@ export default function StudentPortal() {
       setLoading(true);
       console.log('Loading shop data for:', selectedShop);
       
-      const [printersRes, ordersRes] = await Promise.all([
+      const [printersRes, ordersRes, pricingRes] = await Promise.all([
         printerAPI.getPrinters(selectedShop),
         orderAPI.getMyOrders(),
+        pricingAPI.getPricing(selectedShop).catch(() => ({ data: [] })), // Fail silently if pricing not set
       ]);
       
       // Validate and normalize printer data - convert to plain objects
@@ -1249,6 +1259,22 @@ export default function StudentPortal() {
                 />
               </div>
 
+              {/* Price Preview */}
+              {calculatedPrice && (
+                <div className="glass rounded-lg p-3 sm:p-4 border border-white/20">
+                  <div className="flex items-center justify-between">
+                    <div>
+                      <p className="text-sm text-white/80">Price per copy:</p>
+                      <p className="text-lg font-semibold text-white">₱{calculatedPrice.pricePerCopy.toFixed(2)}</p>
+                    </div>
+                    <div className="text-right">
+                      <p className="text-sm text-white/80">Total:</p>
+                      <p className="text-xl font-bold text-white">₱{calculatedPrice.totalPrice.toFixed(2)}</p>
+                    </div>
+                  </div>
+                </div>
+              )}
+
               <button
                 type="submit"
                 disabled={loading}
@@ -1312,6 +1338,13 @@ export default function StudentPortal() {
                           <span>•</span>
                           <span>{order.copies} copies</span>
                         </div>
+                        {order.totalPrice && (
+                          <div className="mt-2">
+                            <p className="text-sm font-semibold text-white">
+                              Total: ₱{order.totalPrice.toFixed(2)}
+                            </p>
+                          </div>
+                        )}
                         <p className="text-xs text-white/70 mt-2">
                           Created: {new Date(order.createdAt).toLocaleString()}
                         </p>

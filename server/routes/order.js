@@ -3,6 +3,7 @@ import Order from '../models/Order.js';
 import Printer from '../models/Printer.js';
 import Notification from '../models/Notification.js';
 import User from '../models/User.js';
+import Pricing from '../models/Pricing.js';
 import { protect } from '../middleware/auth.js';
 import { uploadFile } from '../middleware/upload.js';
 import { generateOrderNumber } from '../utils/helpers.js';
@@ -85,6 +86,22 @@ router.post('/create', protect, uploadFile.single('file'), async (req, res) => {
       status: 'In Queue'
     });
 
+    // Get pricing for this order
+    const pricing = await Pricing.findOne({
+      shop,
+      paperSize: normalizedPaperSize,
+      colorType
+    }).lean();
+
+    if (!pricing) {
+      return res.status(400).json({ 
+        message: 'Pricing not found for this combination. Please contact admin.' 
+      });
+    }
+
+    const pricePerCopy = pricing.pricePerCopy;
+    const totalPrice = pricePerCopy * parseInt(copies);
+
     // Store file in GridFS if MongoDB is connected
     let gridfsFileId = null;
     let filePath = `/uploads/files/${req.file.originalname}`;
@@ -148,6 +165,8 @@ router.post('/create', protect, uploadFile.single('file'), async (req, res) => {
       orientation,
       colorType,
       copies: parseInt(copies),
+      pricePerCopy,
+      totalPrice,
       queuePosition: queueCount + 1
     });
 
@@ -307,7 +326,7 @@ router.get('/my-orders', protect, async (req, res) => {
     // Use lean() for faster queries and select only needed fields
     const orders = await Order.find({ userId: req.user._id })
       .populate('printerId', 'name shop status availablePaperSizes')
-      .select('orderNumber printerId shop fileName filePath gridfsFileId paperSize orientation colorType copies status queuePosition createdAt completedAt')
+      .select('orderNumber printerId shop fileName filePath gridfsFileId paperSize orientation colorType copies pricePerCopy totalPrice status queuePosition createdAt completedAt')
       .lean()
       .sort({ createdAt: -1 });
 

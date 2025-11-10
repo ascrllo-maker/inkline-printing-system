@@ -84,6 +84,17 @@ export const violationAPI = {
   getMyViolations: () => api.get('/violations/my-violations'),
 };
 
+// Pricing API
+export const pricingAPI = {
+  getPricing: (shop) => api.get(`/pricing/${shop}`),
+};
+
+// Admin Pricing API
+export const adminPricingAPI = {
+  getPricing: (shop) => api.get(`/admin/pricing/${shop}`),
+  updatePricing: (shop, pricing) => api.put(`/admin/pricing/${shop}`, { pricing }),
+};
+
 // Admin API
 export const adminAPI = {
   getPendingAccounts: () => api.get('/admin/pending-accounts'),

@@ -31,36 +31,56 @@ export const countPages = async (fileBuffer, mimeType, fileName) => {
       }
       
       try {
-        // Parse with options to ensure all pages are read
-        const data = await pdfParse(fileBuffer, {
-          // Options to improve page counting accuracy
-          max: 0, // 0 = no limit on pages to parse
-          version: 'v1.10.100' // Use a specific parser version for consistency
+        // Parse PDF - pdf-parse automatically extracts page count
+        const data = await pdfParse(fileBuffer);
+        
+        // Get page count - pdf-parse stores it in numpages
+        const pageCount = data.numpages || 1;
+        console.log(`PDF parsed: ${fileName} - numpages: ${data.numpages}, pageCount: ${pageCount}`);
+        console.log(`PDF metadata:`, {
+          numpages: data.numpages,
+          info: data.info ? JSON.stringify(data.info).substring(0, 200) : 'none',
+          metadata: data.metadata ? JSON.stringify(data.metadata).substring(0, 200) : 'none'
         });
         
-        const pageCount = data.numpages || 1;
-        console.log(`Successfully parsed PDF ${fileName}: ${pageCount} pages (numpages: ${data.numpages}, info: ${JSON.stringify(data.info || {})})`);
-        
-        // Double-check: if numpages seems wrong, try alternative method
+        // Double-check: if numpages seems wrong for large files, try alternative method
         if (pageCount === 1 && fileBuffer.length > 50000) {
-          // Large file but only 1 page? This might be wrong
-          console.warn(`Warning: Large PDF file (${fileBuffer.length} bytes) detected as 1 page. This might be inaccurate.`);
+          // Large file but only 1 page? This might be wrong - try extracting from PDF structure
+          console.warn(`Warning: Large PDF file (${fileBuffer.length} bytes) detected as 1 page. Attempting alternative count method.`);
           
-          // Try to extract page count from PDF structure directly
           try {
-            const pdfText = fileBuffer.toString('binary');
-            // Look for /Count patterns in the PDF (common way to store page count)
+            // Convert buffer to string to search for page count indicators
+            const pdfText = fileBuffer.toString('latin1'); // Use latin1 to preserve binary data
+            
+            // Method 1: Look for /Count in page tree (most reliable)
             const countMatches = pdfText.match(/\/Count\s+(\d+)/g);
             if (countMatches && countMatches.length > 0) {
-              const counts = countMatches.map(m => parseInt(m.match(/\d+/)[0]));
-              const maxCount = Math.max(...counts);
-              if (maxCount > pageCount) {
-                console.log(`Found alternative page count from PDF structure: ${maxCount} pages`);
-                return maxCount;
+              const counts = countMatches.map(m => {
+                const match = m.match(/\d+/);
+                return match ? parseInt(match[0]) : 0;
+              }).filter(c => c > 0);
+              
+              if (counts.length > 0) {
+                const maxCount = Math.max(...counts);
+                // Only use if it's significantly larger than the parsed count
+                if (maxCount > pageCount && maxCount < 10000) {
+                  console.log(`Found alternative page count from PDF structure: ${maxCount} pages (was ${pageCount})`);
+                  return maxCount;
+                }
+              }
+            }
+            
+            // Method 2: Count page objects (less reliable but useful as fallback)
+            const pageObjMatches = pdfText.match(/\/Type\s*\/Page[^s]/g);
+            if (pageObjMatches && pageObjMatches.length > pageCount) {
+              console.log(`Found ${pageObjMatches.length} page objects in PDF (parsed count was ${pageCount})`);
+              // Use the higher count if reasonable
+              if (pageObjMatches.length < 10000 && pageObjMatches.length > pageCount) {
+                return pageObjMatches.length;
               }
             }
           } catch (altError) {
-            console.error('Error in alternative page counting method:', altError);
+            console.error('Error in alternative page counting method:', altError.message);
           }
         }
         

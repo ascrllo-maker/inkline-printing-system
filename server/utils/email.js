@@ -257,7 +257,7 @@ export const sendAccountApprovedEmail = async (email, fullName) => {
   await sendEmail(email, subject, html);
 };
 
-export const sendOrderCreatedEmail = async (email, fullName, orderNumber, shop, queuePosition, totalPrice) => {
+export const sendOrderCreatedEmail = async (email, fullName, orderNumber, shop, queuePosition, totalPrice, totalPages, pagesToPrintCount) => {
   const subject = `Your Printing Order #${orderNumber} Has Been Created`;
   
   const html = `
@@ -300,6 +300,14 @@ export const sendOrderCreatedEmail = async (email, fullName, orderNumber, shop, 
                       <td style="padding: 8px 0;">
                         <strong style="color: #111827; font-size: 14px;">Queue Position:</strong>
                         <span style="color: #6b7280; font-size: 14px; margin-left: 8px;">#${queuePosition}</span>
+                      </td>
+                    </tr>
+                    ` : ''}
+                    ${totalPages && totalPages > 0 ? `
+                    <tr>
+                      <td style="padding: 8px 0;">
+                        <strong style="color: #111827; font-size: 14px;">Pages:</strong>
+                        <span style="color: #6b7280; font-size: 14px; margin-left: 8px;">${pagesToPrintCount || totalPages} of ${totalPages} page${(pagesToPrintCount || totalPages) !== 1 ? 's' : ''}</span>
                       </td>
                     </tr>
                     ` : ''}

@@ -13,6 +13,7 @@ import { sendOrderCreatedEmail } from '../utils/email.js';
 import path from 'path';
 import fs from 'fs';
 import { fileURLToPath } from 'url';
+import { countPages, validatePagesToPrint } from '../utils/pageCounter.js';
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
@@ -24,7 +25,7 @@ const router = express.Router();
 // @access  Private
 router.post('/create', protect, uploadFile.single('file'), async (req, res) => {
   try {
-    const { printerId, shop, paperSize, orientation, colorType, copies } = req.body;
+    const { printerId, shop, paperSize, orientation, colorType, copies, pagesToPrint } = req.body;
 
     if (!req.file) {
       return res.status(400).json({ message: 'File is required' });
@@ -86,6 +87,41 @@ router.post('/create', protect, uploadFile.single('file'), async (req, res) => {
       status: 'In Queue'
     });
 
+    // Count pages in the file
+    let totalPages = 1;
+    try {
+      totalPages = await countPages(req.file.buffer, req.file.mimetype, req.file.originalname);
+      console.log(`File ${req.file.originalname} has ${totalPages} pages`);
+    } catch (pageCountError) {
+      console.error('Error counting pages, defaulting to 1:', pageCountError);
+      totalPages = 1;
+    }
+
+    // Parse and validate pages to print
+    let pagesToPrintArray = [];
+    if (pagesToPrint) {
+      try {
+        // If pagesToPrint is a string, parse it as JSON
+        const parsedPages = typeof pagesToPrint === 'string' ? JSON.parse(pagesToPrint) : pagesToPrint;
+        if (Array.isArray(parsedPages)) {
+          pagesToPrintArray = validatePagesToPrint(parsedPages.map(p => parseInt(p)), totalPages);
+        } else if (parsedPages === 'all' || parsedPages === null || parsedPages === '') {
+          // Print all pages
+          pagesToPrintArray = Array.from({ length: totalPages }, (_, i) => i + 1);
+        }
+      } catch (parseError) {
+        console.error('Error parsing pagesToPrint, defaulting to all pages:', parseError);
+        pagesToPrintArray = Array.from({ length: totalPages }, (_, i) => i + 1);
+      }
+    }
+    
+    // If no pages specified or empty array, print all pages
+    if (pagesToPrintArray.length === 0) {
+      pagesToPrintArray = Array.from({ length: totalPages }, (_, i) => i + 1);
+    }
+    
+    const pagesToPrintCount = pagesToPrintArray.length;
+
     // Get pricing for this order
     const pricing = await Pricing.findOne({
       shop,
@@ -99,8 +135,11 @@ router.post('/create', protect, uploadFile.single('file'), async (req, res) => {
       });
     }
 
-    const pricePerCopy = pricing.pricePerCopy;
-    const totalPrice = pricePerCopy * parseInt(copies);
+    // Calculate price based on pages: pricePerPage * pagesToPrintCount * copies
+    // The pricing.pricePerCopy represents price per page
+    const pricePerPage = pricing.pricePerCopy;
+    const pricePerCopy = pricePerPage * pagesToPrintCount; // Price per copy (all selected pages)
+    const totalPrice = pricePerPage * pagesToPrintCount * parseInt(copies);
 
     // Store file in GridFS if MongoDB is connected
     let gridfsFileId = null;
@@ -165,6 +204,10 @@ router.post('/create', protect, uploadFile.single('file'), async (req, res) => {
       orientation,
       colorType,
       copies: parseInt(copies),
+      totalPages,
+      pagesToPrint: pagesToPrintArray,
+      pagesToPrintCount,
+      pricePerPage,
       pricePerCopy,
       totalPrice,
       queuePosition: queueCount + 1
@@ -205,7 +248,9 @@ router.post('/create', protect, uploadFile.single('file'), async (req, res) => {
       orderNumber,
       shop,
       order.queuePosition,
-      totalPrice
+      totalPrice,
+      totalPages || 1,
+      pagesToPrintCount || totalPages || 1
     ).catch(emailError => {
       console.error('Error sending order created email:', emailError.message || emailError);
       // Email failure shouldn't affect order creation
@@ -327,7 +372,7 @@ router.get('/my-orders', protect, async (req, res) => {
     // Use lean() for faster queries and select only needed fields
     const orders = await Order.find({ userId: req.user._id })
       .populate('printerId', 'name shop status availablePaperSizes')
-      .select('orderNumber printerId shop fileName filePath gridfsFileId paperSize orientation colorType copies pricePerCopy totalPrice status queuePosition createdAt completedAt')
+      .select('orderNumber printerId shop fileName filePath gridfsFileId paperSize orientation colorType copies totalPages pagesToPrint pagesToPrintCount pricePerPage pricePerCopy totalPrice status queuePosition createdAt completedAt')
       .lean()
       .sort({ createdAt: -1 });
 

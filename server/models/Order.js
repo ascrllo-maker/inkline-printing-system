@@ -55,6 +55,29 @@ const orderSchema = new mongoose.Schema({
     required: true,
     min: 1
   },
+  totalPages: {
+    type: Number,
+    required: false, // Total pages in the file
+    min: 0,
+    default: 1
+  },
+  pagesToPrint: {
+    type: [Number], // Array of page numbers to print (e.g., [1, 2, 3, 5, 7])
+    required: false,
+    default: [] // Empty array means print all pages
+  },
+  pagesToPrintCount: {
+    type: Number, // Number of pages to print (calculated from pagesToPrint array or totalPages if empty)
+    required: false,
+    min: 1,
+    default: 1
+  },
+  pricePerPage: {
+    type: Number,
+    required: false, // Price per page (calculated from pricing)
+    min: 0,
+    default: 0
+  },
   pricePerCopy: {
     type: Number,
     required: false, // Make optional for backward compatibility with old orders

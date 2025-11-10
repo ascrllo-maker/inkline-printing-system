@@ -1,8 +1,8 @@
 import { useState, useEffect, useMemo, useCallback } from 'react';
 import { useAuth } from '../context/AuthContext';
-import { printerAPI, orderAPI, notificationAPI, pricingAPI } from '../services/api';
+import { printerAPI, orderAPI, notificationAPI, pricingAPI, fileAPI } from '../services/api';
 import { connectSocket, disconnectSocket, getSocket } from '../services/socket';
-import { Printer, Bell, ArrowLeft, LogOut, X, DollarSign } from 'lucide-react';
+import { Printer, Bell, ArrowLeft, LogOut, X, DollarSign, FileText, CheckSquare } from 'lucide-react';
 import toast from 'react-hot-toast';
 
 export default function StudentPortal() {
@@ -17,6 +17,10 @@ export default function StudentPortal() {
   const [activeOrderTab, setActiveOrderTab] = useState('WAITING');
   const [loading, setLoading] = useState(false);
   const [pricing, setPricing] = useState([]);
+  const [totalPages, setTotalPages] = useState(0);
+  const [pagesToPrint, setPagesToPrint] = useState([]);
+  const [showPageSelection, setShowPageSelection] = useState(false);
+  const [countingPages, setCountingPages] = useState(false);
 
   const [orderForm, setOrderForm] = useState({
     printerId: '',
@@ -497,6 +501,9 @@ export default function StudentPortal() {
     setSelectedShop(shop);
     setCurrentView('shop');
     setSelectedPrinter(null);
+    setTotalPages(0);
+    setPagesToPrint([]);
+    setShowPageSelection(false);
     setOrderForm({
       printerId: '',
       shop: shop,
@@ -701,6 +708,63 @@ export default function StudentPortal() {
     }
   };
 
+  // Handle file upload and count pages
+  const handleFileChange = async (e) => {
+    const file = e.target.files[0];
+    if (!file) {
+      setOrderForm({ ...orderForm, file: null });
+      setTotalPages(0);
+      setPagesToPrint([]);
+      setShowPageSelection(false);
+      return;
+    }
+
+    setOrderForm({ ...orderForm, file });
+    setCountingPages(true);
+    setPagesToPrint([]); // Reset pages to print when new file is selected
+    
+    try {
+      const response = await fileAPI.countPages(file);
+      const pageCount = response.data.totalPages || 1;
+      setTotalPages(pageCount);
+      // Default to all pages selected
+      setPagesToPrint(Array.from({ length: pageCount }, (_, i) => i + 1));
+      toast.success(`File loaded: ${pageCount} page${pageCount !== 1 ? 's' : ''} detected`);
+    } catch (error) {
+      console.error('Error counting pages:', error);
+      setTotalPages(1); // Default to 1 page if counting fails
+      setPagesToPrint([1]); // Default to page 1
+      toast.error('Could not count pages. Defaulting to 1 page.');
+    } finally {
+      setCountingPages(false);
+    }
+  };
+
+  // Handle page selection
+  const handlePageToggle = (pageNumber) => {
+    setPagesToPrint(prev => {
+      if (prev.includes(pageNumber)) {
+        // Remove page if already selected
+        const newPages = prev.filter(p => p !== pageNumber);
+        return newPages.length > 0 ? newPages : [pageNumber]; // At least one page must be selected
+      } else {
+        // Add page
+        return [...prev, pageNumber].sort((a, b) => a - b);
+      }
+    });
+  };
+
+  // Handle "Print All Pages" toggle
+  const handleSelectAllPages = () => {
+    if (pagesToPrint.length === totalPages) {
+      // If all pages are selected, keep at least one page selected
+      setPagesToPrint([1]);
+    } else {
+      // Select all pages
+      setPagesToPrint(Array.from({ length: totalPages }, (_, i) => i + 1));
+    }
+  };
+
   const handleCreateOrder = async (e) => {
     e.preventDefault();
     if (!orderForm.file) {
@@ -708,12 +772,31 @@ export default function StudentPortal() {
       return;
     }
 
+    if (totalPages === 0) {
+      toast.error('Please wait for page counting to complete');
+      return;
+    }
+
+    if (pagesToPrint.length === 0) {
+      toast.error('Please select at least one page to print');
+      return;
+    }
+
     setLoading(true);
     try {
-      const response = await orderAPI.createOrder(orderForm);
+      // Include pagesToPrint in the order form
+      const orderData = {
+        ...orderForm,
+        pagesToPrint: pagesToPrint.length === totalPages ? 'all' : pagesToPrint
+      };
+      
+      const response = await orderAPI.createOrder(orderData);
       // Order will be added via socket event, so we don't need to reload
       toast.success('Order created successfully!');
       setSelectedPrinter(null);
+      setTotalPages(0);
+      setPagesToPrint([]);
+      setShowPageSelection(false);
       setOrderForm({
         printerId: '',
         shop: selectedShop,
@@ -778,7 +861,7 @@ export default function StudentPortal() {
     return shopOrders;
   };
 
-  // Calculate price based on current order form
+  // Calculate price based on current order form (price per page * pages to print * copies)
   const calculatedPrice = useMemo(() => {
     try {
       if (!pricing || !Array.isArray(pricing) || pricing.length === 0 || !orderForm.paperSize || !orderForm.colorType || !orderForm.copies) {
@@ -794,17 +877,32 @@ export default function StudentPortal() {
       }
 
       const copies = parseInt(orderForm.copies) || 1;
-      const pricePerCopy = parseFloat(priceItem.pricePerCopy) || 0;
+      const pricePerPage = parseFloat(priceItem.pricePerCopy) || 0;
+      
+      // Calculate pages to print count
+      let pagesToPrintCount = totalPages;
+      if (pagesToPrint && pagesToPrint.length > 0) {
+        pagesToPrintCount = pagesToPrint.length;
+      } else if (totalPages > 0) {
+        pagesToPrintCount = totalPages;
+      } else {
+        pagesToPrintCount = 1; // Default to 1 page if no file uploaded yet
+      }
+
+      const pricePerCopy = pricePerPage * pagesToPrintCount; // Price per copy (all selected pages)
+      const totalPrice = pricePerPage * pagesToPrintCount * copies;
 
       return {
+        pricePerPage: pricePerPage,
+        pagesToPrintCount: pagesToPrintCount,
         pricePerCopy: pricePerCopy,
-        totalPrice: pricePerCopy * copies
+        totalPrice: totalPrice
       };
     } catch (error) {
       console.error('Error calculating price:', error);
       return null;
     }
-  }, [pricing, orderForm.paperSize, orderForm.colorType, orderForm.copies]);
+  }, [pricing, orderForm.paperSize, orderForm.colorType, orderForm.copies, totalPages, pagesToPrint]);
 
   const unreadCount = notifications.filter(n => !n.read).length;
 
@@ -1284,24 +1382,120 @@ export default function StudentPortal() {
                 <label className="block text-sm font-medium text-white mb-1.5 sm:mb-2">File</label>
                 <input
                   type="file"
-                  onChange={(e) => setOrderForm({ ...orderForm, file: e.target.files[0] })}
+                  onChange={handleFileChange}
                   required
                   accept=".pdf,.doc,.docx,.ppt,.pptx,.xls,.xlsx,.jpg,.jpeg,.png,.txt"
                   className="glass-input w-full rounded-lg px-3 sm:px-4 py-2.5 sm:py-2 text-sm sm:text-base file:mr-4 file:py-2 file:px-4 file:rounded-lg file:border-0 file:text-sm file:font-semibold file:bg-blue-600/70 file:text-white hover:file:bg-blue-700/80 touch-manipulation"
+                  disabled={countingPages}
                 />
+                {countingPages && (
+                  <p className="text-sm text-yellow-200 mt-2">Counting pages...</p>
+                )}
+                {totalPages > 0 && !countingPages && (
+                  <p className="text-sm text-white/80 mt-2">
+                    File has {totalPages} page{totalPages !== 1 ? 's' : ''}
+                  </p>
+                )}
               </div>
+
+              {/* Page Selection */}
+              {totalPages > 0 && !countingPages && (
+                <div className="glass rounded-lg p-4 border border-white/20">
+                  <div className="flex items-center justify-between mb-3">
+                    <label className="block text-sm font-medium text-white">Pages to Print</label>
+                    <button
+                      type="button"
+                      onClick={() => setShowPageSelection(!showPageSelection)}
+                      className="flex items-center space-x-2 px-3 py-1.5 text-sm font-medium text-white bg-blue-600/70 hover:bg-blue-700/80 rounded-lg transition-colors"
+                    >
+                      <FileText className="w-4 h-4" />
+                      <span>{showPageSelection ? 'Hide' : 'Select Pages'}</span>
+                    </button>
+                  </div>
+                  
+                  {showPageSelection && (
+                    <div className="mt-3 space-y-2">
+                      <button
+                        type="button"
+                        onClick={handleSelectAllPages}
+                        className="w-full flex items-center justify-center space-x-2 px-3 py-2 text-sm font-medium text-white bg-green-600/70 hover:bg-green-700/80 rounded-lg transition-colors"
+                      >
+                        <CheckSquare className="w-4 h-4" />
+                        <span>
+                          {pagesToPrint.length === totalPages 
+                            ? 'Deselect All (Keep Page 1)' 
+                            : 'Print All Pages'}
+                        </span>
+                      </button>
+                      
+                      <div className="max-h-48 overflow-y-auto grid grid-cols-5 sm:grid-cols-10 gap-2 p-2 bg-white/5 rounded-lg">
+                        {Array.from({ length: totalPages }, (_, i) => i + 1).map((pageNum) => (
+                          <label
+                            key={pageNum}
+                            className={`flex items-center justify-center px-2 py-1.5 rounded cursor-pointer transition-colors ${
+                              pagesToPrint.includes(pageNum)
+                                ? 'bg-blue-600/80 text-white'
+                                : 'bg-white/10 text-white/70 hover:bg-white/20'
+                            }`}
+                          >
+                            <input
+                              type="checkbox"
+                              checked={pagesToPrint.includes(pageNum)}
+                              onChange={() => handlePageToggle(pageNum)}
+                              className="sr-only"
+                            />
+                            <span className="text-xs font-medium">{pageNum}</span>
+                          </label>
+                        ))}
+                      </div>
+                      
+                      <p className="text-xs text-white/70 mt-2">
+                        Selected: {pagesToPrint.length} of {totalPages} page{pagesToPrint.length !== 1 ? 's' : ''}
+                        {pagesToPrint.length > 0 && (
+                          <span className="ml-2">
+                            ({pagesToPrint.join(', ')})
+                          </span>
+                        )}
+                      </p>
+                    </div>
+                  )}
+                  
+                  {!showPageSelection && pagesToPrint.length > 0 && (
+                    <p className="text-sm text-white/80 mt-2">
+                      {pagesToPrint.length === totalPages 
+                        ? `All ${totalPages} pages selected`
+                        : `${pagesToPrint.length} page${pagesToPrint.length !== 1 ? 's' : ''} selected: ${pagesToPrint.slice(0, 5).join(', ')}${pagesToPrint.length > 5 ? '...' : ''}`
+                      }
+                    </p>
+                  )}
+                </div>
+              )}
 
               {/* Price Preview */}
               {calculatedPrice && calculatedPrice.pricePerCopy != null && calculatedPrice.totalPrice != null && (
                 <div className="glass rounded-lg p-3 sm:p-4 border border-white/20">
-                  <div className="flex items-center justify-between">
-                    <div>
-                      <p className="text-sm text-white/80">Price per copy:</p>
-                      <p className="text-lg font-semibold text-white">₱{Number(calculatedPrice.pricePerCopy).toFixed(2)}</p>
+                  <div className="space-y-2">
+                    <div className="flex items-center justify-between">
+                      <div>
+                        <p className="text-xs text-white/70">Price per page:</p>
+                        <p className="text-sm font-semibold text-white">₱{Number(calculatedPrice.pricePerPage).toFixed(2)}</p>
+                      </div>
+                      <div className="text-center">
+                        <p className="text-xs text-white/70">Pages to print:</p>
+                        <p className="text-sm font-semibold text-white">{calculatedPrice.pagesToPrintCount}</p>
+                      </div>
+                      <div className="text-right">
+                        <p className="text-xs text-white/70">Price per copy:</p>
+                        <p className="text-sm font-semibold text-white">₱{Number(calculatedPrice.pricePerCopy).toFixed(2)}</p>
+                      </div>
                     </div>
-                    <div className="text-right">
-                      <p className="text-sm text-white/80">Total:</p>
-                      <p className="text-xl font-bold text-white">₱{Number(calculatedPrice.totalPrice).toFixed(2)}</p>
+                    <div className="pt-2 border-t border-white/20">
+                      <div className="flex items-center justify-between">
+                        <p className="text-sm text-white/80">
+                          {orderForm.copies} copy{orderForm.copies !== 1 ? 'ies' : ''} × {calculatedPrice.pagesToPrintCount} page{calculatedPrice.pagesToPrintCount !== 1 ? 's' : ''}
+                        </p>
+                        <p className="text-xl font-bold text-white">₱{Number(calculatedPrice.totalPrice).toFixed(2)}</p>
+                      </div>
                     </div>
                   </div>
                 </div>
@@ -1374,7 +1568,20 @@ export default function StudentPortal() {
                           <span>{order.colorType}</span>
                           <span>•</span>
                           <span>{order.copies} copies</span>
+                          {order.totalPages && order.totalPages > 0 && (
+                            <>
+                              <span>•</span>
+                              <span>
+                                {order.pagesToPrintCount || order.totalPages} of {order.totalPages} page{(order.pagesToPrintCount || order.totalPages) !== 1 ? 's' : ''}
+                              </span>
+                            </>
+                          )}
                         </div>
+                        {order.pagesToPrint && Array.isArray(order.pagesToPrint) && order.pagesToPrint.length > 0 && order.pagesToPrint.length < (order.totalPages || 0) && (
+                          <p className="text-xs text-white/70 mt-1">
+                            Pages: {order.pagesToPrint.join(', ')}
+                          </p>
+                        )}
                         {order.totalPrice != null && order.totalPrice > 0 && (
                           <div className="mt-2">
                             <p className="text-sm font-semibold text-white">

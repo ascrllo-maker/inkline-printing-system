@@ -15,6 +15,7 @@ import notificationRoutes from './routes/notification.js';
 import violationRoutes from './routes/violation.js';
 import pricingRoutes from './routes/pricing.js';
 import testRoutes from './routes/test.js';
+import fileRoutes from './routes/file.js';
 
 dotenv.config();
 
@@ -193,6 +194,7 @@ app.use('/api/notifications', notificationRoutes);
 app.use('/api/violations', violationRoutes);
 app.use('/api/pricing', pricingRoutes);
 app.use('/api/test', testRoutes);
+app.use('/api/file', fileRoutes);
 
 // Serve static files from React app in production
 if (process.env.NODE_ENV === 'production') {

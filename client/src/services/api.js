@@ -56,7 +56,12 @@ export const orderAPI = {
     const formData = new FormData();
     Object.keys(data).forEach(key => {
       if (key !== 'file') {
-        formData.append(key, data[key]);
+        // Stringify arrays and objects for FormData
+        if (Array.isArray(data[key]) || typeof data[key] === 'object') {
+          formData.append(key, JSON.stringify(data[key]));
+        } else {
+          formData.append(key, data[key]);
+        }
       }
     });
     if (data.file) {
@@ -93,6 +98,18 @@ export const pricingAPI = {
 export const adminPricingAPI = {
   getPricing: (shop) => api.get(`/admin/pricing/${shop}`),
   updatePricing: (shop, pricing) => api.put(`/admin/pricing/${shop}`, { pricing }),
+};
+
+// File API (for file operations like page counting)
+export const fileAPI = {
+  countPages: (file) => {
+    const formData = new FormData();
+    formData.append('file', file);
+    return api.post('/file/count-pages', formData, {
+      headers: { 'Content-Type': 'multipart/form-data' },
+      timeout: 30000, // 30 second timeout
+    });
+  },
 };
 
 // Admin API

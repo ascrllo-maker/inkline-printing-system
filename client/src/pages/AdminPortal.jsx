@@ -1200,6 +1200,16 @@ export default function AdminPortal({ shop }) {
                                 <div className="text-sm text-white">
                                   <div>{order.paperSize} • {order.orientation}</div>
                                   <div className="text-white/80">{order.colorType} • {order.copies} copies</div>
+                                  {order.totalPages && order.totalPages > 0 && (
+                                    <div className="text-white/80">
+                                      {(order.pagesToPrintCount || order.totalPages)} of {order.totalPages} page{(order.pagesToPrintCount || order.totalPages) !== 1 ? 's' : ''}
+                                    </div>
+                                  )}
+                                  {order.pagesToPrint && Array.isArray(order.pagesToPrint) && order.pagesToPrint.length > 0 && order.pagesToPrint.length < (order.totalPages || 0) && (
+                                    <div className="text-white/70 text-xs mt-1">
+                                      Pages: {order.pagesToPrint.join(', ')}
+                                    </div>
+                                  )}
                                   {order.totalPrice != null && order.totalPrice > 0 && (
                                     <div className="text-white/90 font-semibold mt-1">
                                       Total: ₱{Number(order.totalPrice).toFixed(2)}
@@ -1277,7 +1287,20 @@ export default function AdminPortal({ shop }) {
                             <span>{order.colorType}</span>
                             <span>•</span>
                             <span>{order.copies} copies</span>
+                            {order.totalPages && order.totalPages > 0 && (
+                              <>
+                                <span>•</span>
+                                <span>
+                                  {(order.pagesToPrintCount || order.totalPages)} of {order.totalPages} page{(order.pagesToPrintCount || order.totalPages) !== 1 ? 's' : ''}
+                                </span>
+                              </>
+                            )}
                           </div>
+                          {order.pagesToPrint && Array.isArray(order.pagesToPrint) && order.pagesToPrint.length > 0 && order.pagesToPrint.length < (order.totalPages || 0) && (
+                            <p className="text-xs text-white/70 mt-1">
+                              Pages: {order.pagesToPrint.join(', ')}
+                            </p>
+                          )}
                           {order.totalPrice != null && order.totalPrice > 0 && (
                             <div className="mt-2">
                               <p className="text-sm font-semibold text-white">
@@ -1325,7 +1348,20 @@ export default function AdminPortal({ shop }) {
                             <span>{order.colorType}</span>
                             <span>•</span>
                             <span>{order.copies} copies</span>
+                            {order.totalPages && order.totalPages > 0 && (
+                              <>
+                                <span>•</span>
+                                <span>
+                                  {(order.pagesToPrintCount || order.totalPages)} of {order.totalPages} page{(order.pagesToPrintCount || order.totalPages) !== 1 ? 's' : ''}
+                                </span>
+                              </>
+                            )}
                           </div>
+                          {order.pagesToPrint && Array.isArray(order.pagesToPrint) && order.pagesToPrint.length > 0 && order.pagesToPrint.length < (order.totalPages || 0) && (
+                            <p className="text-xs text-white/70 mt-1">
+                              Pages: {order.pagesToPrint.join(', ')}
+                            </p>
+                          )}
                           {order.totalPrice != null && order.totalPrice > 0 && (
                             <div className="mt-2">
                               <p className="text-sm font-semibold text-white">

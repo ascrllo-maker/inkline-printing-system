@@ -3,8 +3,9 @@ name: Keep Render Service Awake
 on:
   schedule:
     # Run every 10 minutes to keep Render service awake
+    # Cron format: minute hour day month weekday
     - cron: '*/10 * * * *'
-  workflow_dispatch: # Allow manual triggering
+  workflow_dispatch: # Allow manual triggering from GitHub UI
 
 jobs:
   ping:
@@ -12,7 +13,14 @@ jobs:
     steps:
       - name: Ping Render Service
         run: |
-          curl -f https://${{ secrets.RENDER_URL }}/ping || echo "Ping failed"
+          # Replace 'your-app-name' with your actual Render app name
+          # Or use RENDER_URL secret if configured
+          RENDER_URL="${RENDER_URL:-your-app-name.onrender.com}"
+          echo "Pinging: https://${RENDER_URL}/ping"
+          curl -f -m 10 "https://${RENDER_URL}/ping" || echo "Ping failed - service may be sleeping"
         env:
-          RENDER_URL: ${{ secrets.RENDER_URL }}
+          # Option 1: Use secret (recommended) - Set in Repository Settings > Secrets
+          # RENDER_URL: ${{ secrets.RENDER_URL }}
+          # Option 2: Hardcode your app name here (replace 'your-app-name' with your actual Render app name)
+          RENDER_URL: ${{ secrets.RENDER_URL || 'your-app-name.onrender.com' }}
 

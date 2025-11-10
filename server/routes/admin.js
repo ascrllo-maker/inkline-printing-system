@@ -131,7 +131,7 @@ router.get('/orders/:shop', protect, async (req, res) => {
     const orders = await Order.find(query)
       .populate('userId', 'fullName email')
       .populate('printerId', 'name shop status availablePaperSizes')
-      .select('orderNumber userId printerId shop fileName filePath gridfsFileId paperSize orientation colorType copies status queuePosition createdAt completedAt')
+      .select('orderNumber userId printerId shop fileName filePath gridfsFileId paperSize orientation colorType copies pricePerCopy totalPrice status queuePosition createdAt completedAt')
       .lean()
       .sort({ createdAt: -1 });
 

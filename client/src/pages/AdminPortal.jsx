@@ -1200,9 +1200,9 @@ export default function AdminPortal({ shop }) {
                                 <div className="text-sm text-white">
                                   <div>{order.paperSize} • {order.orientation}</div>
                                   <div className="text-white/80">{order.colorType} • {order.copies} copies</div>
-                                  {order.totalPrice && (
+                                  {order.totalPrice != null && order.totalPrice > 0 && (
                                     <div className="text-white/90 font-semibold mt-1">
-                                      Total: ₱{order.totalPrice.toFixed(2)}
+                                      Total: ₱{Number(order.totalPrice).toFixed(2)}
                                     </div>
                                   )}
                                 </div>
@@ -1278,10 +1278,10 @@ export default function AdminPortal({ shop }) {
                             <span>•</span>
                             <span>{order.copies} copies</span>
                           </div>
-                          {order.totalPrice && (
+                          {order.totalPrice != null && order.totalPrice > 0 && (
                             <div className="mt-2">
                               <p className="text-sm font-semibold text-white">
-                                Total: ₱{order.totalPrice.toFixed(2)}
+                                Total: ₱{Number(order.totalPrice).toFixed(2)}
                               </p>
                             </div>
                           )}
@@ -1317,6 +1317,22 @@ export default function AdminPortal({ shop }) {
                             User: {order.userId?.fullName || 'N/A'} ({order.userId?.email || 'N/A'})
                           </p>
                           <p className="text-sm text-white/90">{order.fileName}</p>
+                          <div className="flex items-center space-x-4 text-sm text-white/80 mt-2">
+                            <span>{order.paperSize}</span>
+                            <span>•</span>
+                            <span>{order.orientation}</span>
+                            <span>•</span>
+                            <span>{order.colorType}</span>
+                            <span>•</span>
+                            <span>{order.copies} copies</span>
+                          </div>
+                          {order.totalPrice != null && order.totalPrice > 0 && (
+                            <div className="mt-2">
+                              <p className="text-sm font-semibold text-white">
+                                Total: ₱{Number(order.totalPrice).toFixed(2)}
+                              </p>
+                            </div>
+                          )}
                         </div>
                         <span className="px-3 py-1 rounded-full text-xs font-medium bg-red-300/80 text-red-900">
                           Cancelled

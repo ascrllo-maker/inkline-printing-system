@@ -1375,10 +1375,10 @@ export default function StudentPortal() {
                           <span>•</span>
                           <span>{order.copies} copies</span>
                         </div>
-                        {order.totalPrice && (
+                        {order.totalPrice != null && order.totalPrice > 0 && (
                           <div className="mt-2">
                             <p className="text-sm font-semibold text-white">
-                              Total: ₱{order.totalPrice.toFixed(2)}
+                              Total: ₱{Number(order.totalPrice).toFixed(2)}
                             </p>
                           </div>
                         )}

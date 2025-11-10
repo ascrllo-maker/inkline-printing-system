@@ -204,7 +204,8 @@ router.post('/create', protect, uploadFile.single('file'), async (req, res) => {
       req.user.fullName,
       orderNumber,
       shop,
-      order.queuePosition
+      order.queuePosition,
+      totalPrice
     ).catch(emailError => {
       console.error('Error sending order created email:', emailError.message || emailError);
       // Email failure shouldn't affect order creation

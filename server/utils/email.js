@@ -257,7 +257,7 @@ export const sendAccountApprovedEmail = async (email, fullName) => {
   await sendEmail(email, subject, html);
 };
 
-export const sendOrderCreatedEmail = async (email, fullName, orderNumber, shop, queuePosition) => {
+export const sendOrderCreatedEmail = async (email, fullName, orderNumber, shop, queuePosition, totalPrice) => {
   const subject = `Your Printing Order #${orderNumber} Has Been Created`;
   
   const html = `
@@ -300,6 +300,14 @@ export const sendOrderCreatedEmail = async (email, fullName, orderNumber, shop, 
                       <td style="padding: 8px 0;">
                         <strong style="color: #111827; font-size: 14px;">Queue Position:</strong>
                         <span style="color: #6b7280; font-size: 14px; margin-left: 8px;">#${queuePosition}</span>
+                      </td>
+                    </tr>
+                    ` : ''}
+                    ${totalPrice != null && totalPrice > 0 ? `
+                    <tr>
+                      <td style="padding: 8px 0; border-top: 1px solid #e5e7eb; margin-top: 8px; padding-top: 12px;">
+                        <strong style="color: #111827; font-size: 16px;">Total:</strong>
+                        <span style="color: #2563eb; font-size: 18px; margin-left: 8px; font-weight: 600;">₱${Number(totalPrice).toFixed(2)}</span>
                       </td>
                     </tr>
                     ` : ''}

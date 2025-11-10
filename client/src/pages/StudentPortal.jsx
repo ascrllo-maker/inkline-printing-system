@@ -434,9 +434,11 @@ export default function StudentPortal() {
       
       setPrinters(printers);
       setOrders((ordersRes.data || []).filter(o => o.shop === selectedShop));
+      setPricing(pricingRes.data || []); // Set pricing data
     } catch (error) {
       console.error('Error loading shop data:', error);
       toast.error('Failed to load shop data');
+      setPricing([]); // Set empty array on error
     } finally {
       setLoading(false);
     }
@@ -773,6 +775,34 @@ export default function StudentPortal() {
     }
     return shopOrders;
   };
+
+  // Calculate price based on current order form
+  const calculatedPrice = useMemo(() => {
+    try {
+      if (!pricing || !Array.isArray(pricing) || pricing.length === 0 || !orderForm.paperSize || !orderForm.colorType || !orderForm.copies) {
+        return null;
+      }
+
+      const priceItem = pricing.find(
+        p => p && p.paperSize === orderForm.paperSize && p.colorType === orderForm.colorType
+      );
+
+      if (!priceItem || typeof priceItem.pricePerCopy !== 'number') {
+        return null;
+      }
+
+      const copies = parseInt(orderForm.copies) || 1;
+      const pricePerCopy = parseFloat(priceItem.pricePerCopy) || 0;
+
+      return {
+        pricePerCopy: pricePerCopy,
+        totalPrice: pricePerCopy * copies
+      };
+    } catch (error) {
+      console.error('Error calculating price:', error);
+      return null;
+    }
+  }, [pricing, orderForm.paperSize, orderForm.colorType, orderForm.copies]);
 
   const unreadCount = notifications.filter(n => !n.read).length;
 
@@ -1184,10 +1214,10 @@ export default function StudentPortal() {
         </div>
 
         {/* Order Form (shown when printer is selected) */}
-        {selectedPrinter && selectedPrinter.status === 'Active' && (
+        {selectedPrinter && selectedPrinter.status === 'Active' && selectedPrinter.availablePaperSizes && Array.isArray(selectedPrinter.availablePaperSizes) && selectedPrinter.availablePaperSizes.length > 0 && (
           <div className="glass-card rounded-lg sm:rounded-xl p-4 sm:p-6 mb-6 sm:mb-8">
             <h3 className="text-lg sm:text-xl font-semibold mb-3 sm:mb-4 text-white">
-              <span className="hidden sm:inline">Print Order Form - {selectedPrinter.name}</span>
+              <span className="hidden sm:inline">Print Order Form - {selectedPrinter.name || 'Printer'}</span>
               <span className="sm:hidden">Order Form</span>
             </h3>
             <form onSubmit={handleCreateOrder} className="space-y-3 sm:space-y-4">
@@ -1201,7 +1231,7 @@ export default function StudentPortal() {
                     className="glass-input w-full rounded-lg px-3 sm:px-4 py-2.5 sm:py-2 text-base touch-manipulation text-white border border-white/20 backdrop-blur-md bg-white/10 hover:bg-white/15 focus:bg-white/15 transition-colors cursor-pointer"
                   >
                     {selectedPrinter.availablePaperSizes
-                      .filter(ps => ps.enabled)
+                      .filter(ps => ps && ps.enabled !== false && ps.size)
                       .map((ps, idx) => (
                         <option key={idx} value={ps.size} className="bg-gray-900 text-white">{ps.size}</option>
                       ))}
@@ -1260,18 +1290,23 @@ export default function StudentPortal() {
               </div>
 
               {/* Price Preview */}
-              {calculatedPrice && (
+              {calculatedPrice && calculatedPrice.pricePerCopy != null && calculatedPrice.totalPrice != null && (
                 <div className="glass rounded-lg p-3 sm:p-4 border border-white/20">
                   <div className="flex items-center justify-between">
                     <div>
                       <p className="text-sm text-white/80">Price per copy:</p>
-                      <p className="text-lg font-semibold text-white">₱{calculatedPrice.pricePerCopy.toFixed(2)}</p>
+                      <p className="text-lg font-semibold text-white">₱{Number(calculatedPrice.pricePerCopy).toFixed(2)}</p>
                     </div>
                     <div className="text-right">
                       <p className="text-sm text-white/80">Total:</p>
-                      <p className="text-xl font-bold text-white">₱{calculatedPrice.totalPrice.toFixed(2)}</p>
+                      <p className="text-xl font-bold text-white">₱{Number(calculatedPrice.totalPrice).toFixed(2)}</p>
                     </div>
                   </div>
+                </div>
+              )}
+              {!calculatedPrice && pricing && pricing.length > 0 && (
+                <div className="glass rounded-lg p-3 sm:p-4 border border-yellow-300/30">
+                  <p className="text-sm text-yellow-200">Price information is being calculated...</p>
                 </div>
               )}
 

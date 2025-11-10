@@ -359,8 +359,12 @@ router.put('/cancel/:id', protect, async (req, res) => {
 
     // Check if order belongs to user
     // Handle both populated and non-populated userId
-    const orderUserId = order.userId._id ? order.userId._id.toString() : order.userId.toString();
-    if (orderUserId !== req.user._id.toString()) {
+    const orderUserId = order.userId?._id || order.userId;
+    if (!orderUserId) {
+      return res.status(400).json({ message: 'Order user information is missing' });
+    }
+    
+    if (orderUserId.toString() !== req.user._id.toString()) {
       return res.status(403).json({ message: 'Not authorized to cancel this order' });
     }
 
@@ -372,123 +376,125 @@ router.put('/cancel/:id', protect, async (req, res) => {
     order.status = 'Cancelled';
     await order.save();
 
+    // Send response immediately before async operations
+    res.json({ message: 'Order cancelled successfully', order });
+
     // Get printer ID (handle both ObjectId and populated object)
-    const printerId = order.printerId._id ? order.printerId._id : order.printerId;
-
-    // Recalculate actual queue count after cancellation (only "In Queue" orders)
-    const actualQueueCount = await Order.countDocuments({
-      printerId: printerId,
-      status: 'In Queue'
-    });
-
-    // Update printer queue count with accurate count
-    const updatedPrinter = await Printer.findByIdAndUpdate(
-      printerId, 
-      { queueCount: actualQueueCount }, 
-      { new: true }
-    );
-
-    // Get io instance once
+    const printerId = order.printerId?._id || order.printerId;
     const io = req.app.get('io');
 
-    // Recalculate queue positions for all "In Queue" orders on this printer
-    if (io) {
+    // All async operations happen in the background (non-blocking)
+    setImmediate(async () => {
       try {
-        const affectedOrders = await Order.find({
-          printerId: printerId,
-          status: 'In Queue'
-        }).populate('userId', '_id');
-
-        // Recalculate queue positions for all affected orders
-        for (const affectedOrder of affectedOrders) {
-          const queuePosition = await Order.countDocuments({
+        // Recalculate queue count and positions if printerId exists
+        if (printerId) {
+          // Recalculate actual queue count after cancellation (only "In Queue" orders)
+          const actualQueueCount = await Order.countDocuments({
             printerId: printerId,
-            status: 'In Queue',
-            createdAt: { $lte: affectedOrder.createdAt }
+            status: 'In Queue'
           });
-          await Order.findByIdAndUpdate(affectedOrder._id, { queuePosition });
-          
-          // Emit update to the user who owns this order
-          if (affectedOrder.userId && affectedOrder.userId._id) {
-            io.to(affectedOrder.userId._id.toString()).emit('order_queue_updated', {
-              orderId: affectedOrder._id,
-              queuePosition
-            });
+
+          // Update printer queue count with accurate count
+          const updatedPrinter = await Printer.findByIdAndUpdate(
+            printerId, 
+            { queueCount: actualQueueCount }, 
+            { new: true }
+          ).lean();
+
+          if (updatedPrinter && io) {
+            io.emit('printer_updated', updatedPrinter);
+          }
+
+          // Optimize queue position recalculation using bulk operations
+          const affectedOrders = await Order.find({
+            printerId: printerId,
+            status: 'In Queue'
+          }).select('_id userId createdAt').lean().sort({ createdAt: 1 });
+
+          // Calculate queue positions in a single pass and bulk update
+          const updateOps = affectedOrders.map((affectedOrder, index) => {
+            const queuePosition = index + 1;
+            return {
+              updateOne: {
+                filter: { _id: affectedOrder._id },
+                update: { $set: { queuePosition } }
+              }
+            };
+          });
+
+          // Bulk update all queue positions at once
+          if (updateOps.length > 0) {
+            await Order.bulkWrite(updateOps);
+            
+            // Emit updates to users
+            if (io) {
+              affectedOrders.forEach((affectedOrder, index) => {
+                if (affectedOrder.userId) {
+                  io.to(affectedOrder.userId.toString()).emit('order_queue_updated', {
+                    orderId: affectedOrder._id,
+                    queuePosition: index + 1
+                  });
+                }
+              });
+            }
           }
         }
       } catch (queueError) {
         console.error('Error recalculating queue positions:', queueError);
         // Continue even if queue position recalculation fails
       }
-    }
 
-    // Create notification for user
-    try {
-      await Notification.create({
-        userId: req.user._id,
-        title: 'Order Cancelled',
-        message: `Your order #${order.orderNumber} has been cancelled.`,
-        type: 'order_update',
-        relatedOrderId: order._id
-      });
-    } catch (notifError) {
-      console.error('Error creating user notification:', notifError);
-      // Continue even if notification creation fails
-    }
-
-    // Create notifications for all admins of this shop
-    try {
-      const adminRole = order.shop === 'IT' ? 'it_admin' : 'ssc_admin';
-      const admins = await User.find({ role: adminRole });
-      
-      for (const admin of admins) {
+      // Create notification for user
+      try {
         await Notification.create({
-          userId: admin._id,
+          userId: req.user._id,
           title: 'Order Cancelled',
-          message: `Order #${order.orderNumber} from ${order.userId?.fullName || 'a student'} has been cancelled.`,
-          type: 'order_cancelled',
+          message: `Your order #${order.orderNumber} has been cancelled.`,
+          type: 'order_update',
           relatedOrderId: order._id
         });
+      } catch (notifError) {
+        console.error('Error creating user notification:', notifError);
+        // Continue even if notification creation fails
       }
-    } catch (adminNotifError) {
-      console.error('Error creating admin notifications:', adminNotifError);
-      // Continue even if admin notification creation fails
-    }
 
-    // Populate order before emitting
-    let populatedCancelledOrder;
-    try {
-      populatedCancelledOrder = await Order.findById(order._id)
-        .populate('userId', 'fullName email')
-        .populate('printerId');
-      
-      if (!populatedCancelledOrder) {
-        populatedCancelledOrder = order;
-      }
-    } catch (populateError) {
-      console.error('Error populating order:', populateError);
-      populatedCancelledOrder = order;
-    }
-
-    // Emit socket events
-    if (io) {
+      // Create notifications for all admins of this shop
       try {
-        io.to(req.user._id.toString()).emit('order_cancelled', populatedCancelledOrder);
-        io.to(`${order.shop}_admins`).emit('order_cancelled', populatedCancelledOrder);
+        const adminRole = order.shop === 'IT' ? 'it_admin' : 'ssc_admin';
+        const admins = await User.find({ role: adminRole }).select('_id').lean();
         
-        // Emit notification event to admins
-        io.to(`${order.shop}_admins`).emit('notification', { type: 'order_cancelled' });
-        
-        if (updatedPrinter) {
-          io.emit('printer_updated', updatedPrinter);
+        if (admins.length > 0) {
+          const adminNotifications = admins.map(admin => ({
+            userId: admin._id,
+            title: 'Order Cancelled',
+            message: `Order #${order.orderNumber} from ${order.userId?.fullName || 'a student'} has been cancelled.`,
+            type: 'order_cancelled',
+            relatedOrderId: order._id
+          }));
+          
+          await Notification.insertMany(adminNotifications);
         }
-      } catch (socketError) {
-        console.error('Error emitting socket events:', socketError);
-        // Continue even if socket emission fails
+      } catch (adminNotifError) {
+        console.error('Error creating admin notifications:', adminNotifError);
+        // Continue even if admin notification creation fails
       }
-    }
 
-    res.json({ message: 'Order cancelled successfully', order: populatedCancelledOrder || order });
+      // Populate order and emit socket events
+      if (io) {
+        try {
+          const populatedCancelledOrder = await Order.findById(order._id)
+            .populate('userId', 'fullName email')
+            .populate('printerId');
+          
+          io.to(req.user._id.toString()).emit('order_cancelled', populatedCancelledOrder || order);
+          io.to(`${order.shop}_admins`).emit('order_cancelled', populatedCancelledOrder || order);
+          io.to(`${order.shop}_admins`).emit('notification', { type: 'order_cancelled' });
+        } catch (socketError) {
+          console.error('Error emitting socket events:', socketError);
+          // Continue even if socket emission fails
+        }
+      }
+    });
   } catch (error) {
     res.status(500).json({ message: 'Server error', error: error.message });
   }

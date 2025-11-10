@@ -4,8 +4,7 @@ const pricingSchema = new mongoose.Schema({
   shop: {
     type: String,
     enum: ['IT', 'SSC'],
-    required: true,
-    index: true
+    required: true
   },
   paperSize: {
     type: String,
@@ -35,10 +34,8 @@ const pricingSchema = new mongoose.Schema({
 });
 
 // Compound index for fast lookups and uniqueness
+// This index can be used for queries on shop alone (leftmost prefix)
 pricingSchema.index({ shop: 1, paperSize: 1, colorType: 1 }, { unique: true });
-
-// Index for shop queries
-pricingSchema.index({ shop: 1 });
 
 export default mongoose.model('Pricing', pricingSchema);
 

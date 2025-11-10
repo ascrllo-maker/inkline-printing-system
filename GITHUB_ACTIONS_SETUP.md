@@ -2,6 +2,8 @@
 
 This is the **easiest and most reliable** way to keep your Render service awake - **no email verification needed** since you're already using GitHub!
 
+> 📖 **For the MOST DETAILED step-by-step instructions with screenshots descriptions, troubleshooting, and comprehensive guide, see [DETAILED_SETUP_GUIDE.md](./DETAILED_SETUP_GUIDE.md)**
+
 ## Quick Setup (2 Minutes)
 
 ### Step 1: Get Your Render App Name

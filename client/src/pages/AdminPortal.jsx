@@ -13,6 +13,8 @@ function IDImageDisplay({ imageUrl }) {
   const [error, setError] = useState(false);
 
   useEffect(() => {
+    let currentBlobUrl = null;
+    
     const loadImage = async () => {
       if (!imageUrl) {
         setLoading(false);
@@ -37,6 +39,7 @@ function IDImageDisplay({ imageUrl }) {
         // Create blob URL from response
         const blob = new Blob([response.data], { type: response.data.type || 'image/jpeg' });
         const blobUrl = URL.createObjectURL(blob);
+        currentBlobUrl = blobUrl;
         setImageSrc(blobUrl);
         setLoading(false);
       } catch (err) {
@@ -50,11 +53,11 @@ function IDImageDisplay({ imageUrl }) {
 
     // Cleanup: revoke blob URL when component unmounts or imageUrl changes
     return () => {
-      if (imageSrc) {
-        URL.revokeObjectURL(imageSrc);
+      if (currentBlobUrl) {
+        URL.revokeObjectURL(currentBlobUrl);
       }
     };
-  }, [imageUrl, imageSrc]);
+  }, [imageUrl]);
 
   if (loading) {
     return (

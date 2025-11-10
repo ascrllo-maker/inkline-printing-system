@@ -70,7 +70,8 @@ router.post('/signup', uploadId.single('idImage'), async (req, res) => {
           await new Promise((resolve, reject) => {
             uploadStream.on('finish', () => {
               idImageGridFSId = uploadStream.id;
-              idImagePath = `/gridfs/id/${idImageGridFSId}`;
+              // Store relative path (without /api prefix) since frontend API client adds it
+              idImagePath = `/admin/id-image/${idImageGridFSId}`;
               console.log('ID image stored in GridFS:', idImageGridFSId, filename);
               resolve();
             });

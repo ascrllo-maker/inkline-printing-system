@@ -4,6 +4,88 @@ import { adminAPI, printerAPI, notificationAPI, adminPricingAPI } from '../servi
 import { connectSocket, disconnectSocket, joinAdminRoom, leaveAdminRoom, getSocket } from '../services/socket';
 import { Printer, Bell, LogOut, FileText, Users, AlertTriangle, CheckCircle, XCircle, Plus, Download, Ban, Unlock, X, Trash2, DollarSign, Save } from 'lucide-react';
 import toast from 'react-hot-toast';
+import api from '../services/api';
+
+// Component to display ID images with authentication
+function IDImageDisplay({ imageUrl }) {
+  const [imageSrc, setImageSrc] = useState(null);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState(false);
+
+  useEffect(() => {
+    const loadImage = async () => {
+      if (!imageUrl) {
+        setLoading(false);
+        return;
+      }
+
+      try {
+        setLoading(true);
+        setError(false);
+
+        // Ensure the URL starts with /api
+        const url = imageUrl.startsWith('/api/') ? imageUrl : `/api${imageUrl}`;
+        
+        // Fetch image with authentication headers
+        const response = await api.get(url, {
+          responseType: 'blob', // Important: get response as blob
+          headers: {
+            'Accept': 'image/*'
+          }
+        });
+
+        // Create blob URL from response
+        const blob = new Blob([response.data], { type: response.data.type || 'image/jpeg' });
+        const blobUrl = URL.createObjectURL(blob);
+        setImageSrc(blobUrl);
+        setLoading(false);
+      } catch (err) {
+        console.error('Error loading ID image:', err);
+        setError(true);
+        setLoading(false);
+      }
+    };
+
+    loadImage();
+
+    // Cleanup: revoke blob URL when component unmounts or imageUrl changes
+    return () => {
+      if (imageSrc) {
+        URL.revokeObjectURL(imageSrc);
+      }
+    };
+  }, [imageUrl, imageSrc]);
+
+  if (loading) {
+    return (
+      <div className="flex items-center justify-center max-w-md h-48 bg-white/5 rounded-lg border border-white/30">
+        <p className="text-white/60 text-sm">Loading image...</p>
+      </div>
+    );
+  }
+
+  if (error || !imageSrc) {
+    return (
+      <div className="flex items-center justify-center max-w-md h-48 bg-white/5 rounded-lg border border-white/30">
+        <p className="text-white/60 text-sm">Failed to load image</p>
+      </div>
+    );
+  }
+
+  return (
+    <img
+      src={imageSrc}
+      alt="School ID"
+      className="max-w-md rounded-lg border border-white/30"
+      onError={() => {
+        setError(true);
+        if (imageSrc) {
+          URL.revokeObjectURL(imageSrc);
+        }
+      }}
+    />
+  );
+}
 
 export default function AdminPortal({ shop }) {
   const { user, logout } = useAuth();
@@ -1401,15 +1483,7 @@ export default function AdminPortal({ shop }) {
                           {account.idImage && (
                             <div className="mt-4">
                               <p className="text-sm font-medium text-white mb-2">DVC School ID:</p>
-                              <img
-                                src={account.idImage.startsWith('/api/') ? account.idImage : `/api${account.idImage}`}
-                                alt="School ID"
-                                className="max-w-md rounded-lg border border-white/30"
-                                onError={(e) => {
-                                  console.error('Error loading ID image:', account.idImage);
-                                  e.target.style.display = 'none';
-                                }}
-                              />
+                              <IDImageDisplay imageUrl={account.idImage} />
                             </div>
                           )}
                         </div>

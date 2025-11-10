@@ -219,8 +219,8 @@ if (process.env.NODE_ENV === 'production') {
       if (req.path.startsWith('/api')) {
         return next();
       }
-      // Don't serve React app for health check or root (already handled)
-      if (req.path === '/health' || req.path === '/') {
+      // Don't serve React app for health check, ping, or root (already handled)
+      if (req.path === '/health' || req.path === '/ping' || req.path === '/') {
         return next();
       }
       res.sendFile(path.join(clientBuildPath, 'index.html'));

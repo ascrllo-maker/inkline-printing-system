@@ -30,117 +30,108 @@ export const countPages = async (fileBuffer, mimeType, fileName) => {
         // Still try to parse it in case it's a valid PDF with unusual structure
       }
       
-      // Always try to extract page count from PDF structure first (most reliable)
+      // Extract page count from PDF structure (primary method - most reliable)
       let pageCountFromStructure = null;
       try {
-        const pdfText = fileBuffer.toString('latin1'); // Use latin1 to preserve binary data
+        // Convert buffer to string - use binary encoding to preserve PDF structure
+        const pdfText = fileBuffer.toString('binary');
         
-        console.log(`Analyzing PDF structure for ${fileName}...`);
+        console.log(`Analyzing PDF structure for ${fileName} (${fileBuffer.length} bytes)...`);
         
-        // Method 1: Count page objects directly (most reliable - each page has a /Type /Page)
-        // Look for "/Type/Page" or "/Type /Page" patterns (PDF allows optional whitespace)
-        // More flexible pattern to catch variations: /Type/Page, /Type /Page, /Type\n/Page, etc.
-        const pageObjPatterns = [
-          /\/Type\s*\/Page(?:\s|>|>>|obj|endobj|\/)/g,
-          /\/Type\s*\/Page\s*(?:>>|R|obj)/g,
-          /\/Type[\/\s]\/Page/g
-        ];
-        
-        const allPageObjects = new Set();
-        for (const pattern of pageObjPatterns) {
-          let match;
-          while ((match = pattern.exec(pdfText)) !== null) {
-            // Store the position to avoid counting the same object twice
-            const pos = match.index;
-            allPageObjects.add(pos);
+        // PRIORITY METHOD: Extract /Count from page tree (most reliable)
+        // PDFs store total page count in the root page tree node as /Count <number>
+        // Look for all /Count values and use the maximum (root page tree has the total)
+        const countPattern = /\/Count\s+(\d+)/g;
+        const countMatches = [];
+        let match;
+        while ((match = countPattern.exec(pdfText)) !== null) {
+          const count = parseInt(match[1]);
+          if (count > 0 && count < 100000) {
+            countMatches.push({
+              count: count,
+              position: match.index,
+              context: pdfText.substring(Math.max(0, match.index - 50), Math.min(pdfText.length, match.index + 100))
+            });
           }
         }
         
-        if (allPageObjects.size > 0) {
-          pageCountFromStructure = allPageObjects.size;
-          console.log(`Method 1: Found ${pageCountFromStructure} pages by counting /Type /Page objects (unique positions: ${allPageObjects.size})`);
+        if (countMatches.length > 0) {
+          // Sort by count (descending) - the largest is usually the total page count
+          countMatches.sort((a, b) => b.count - a.count);
+          const maxCount = countMatches[0].count;
+          
+          // Verify it's in a page tree context (look for /Type /Pages nearby)
+          const hasPageTreeContext = countMatches.some(m => {
+            const context = m.context.toLowerCase();
+            return context.includes('/type') && context.includes('/pages');
+          });
+          
+          if (hasPageTreeContext || countMatches.length === 1) {
+            pageCountFromStructure = maxCount;
+            console.log(`✓ Found page count from /Count in page tree: ${pageCountFromStructure} pages`);
+            console.log(`  (Checked ${countMatches.length} /Count values, max: ${maxCount})`);
+          } else {
+            // Use the max count anyway if it's reasonable
+            pageCountFromStructure = maxCount;
+            console.log(`✓ Found page count from /Count values: ${pageCountFromStructure} pages`);
+            console.log(`  (Checked ${countMatches.length} /Count values, using max: ${maxCount})`);
+          }
         }
         
-        // Method 2: Look for /Count in page tree nodes (very reliable for multi-page PDFs)
-        // Pattern: /Type /Pages followed by /Count <number>
-        // PDFs can have whitespace/newlines, so we need flexible matching
+        // FALLBACK METHOD 1: Count /Type /Page objects (each page has one)
         if (!pageCountFromStructure || pageCountFromStructure === 1) {
-          // Try to find the root page tree node's Count
-          // Look for patterns like: /Type /Pages ... /Count 7
-          const pageTreePatterns = [
-            /\/Type\s*\/Pages[\s\S]{0,500}?\/Count\s+(\d+)/g,
-            /\/Count\s+(\d+)[\s\S]{0,200}?\/Type\s*\/Pages/g,
-            /\/Pages\s+\d+\s+\d+\s+R[\s\S]{0,500}?\/Count\s+(\d+)/g
+          // Multiple patterns to catch different PDF formats
+          const pageTypePatterns = [
+            /\/Type\s*\/Page\s*(?:>>|R|obj|endobj)/g,
+            /\/Type\s*\/Page\s*$/gm,
+            /\/Type[\/\s]+Page[^a-z]/gi
           ];
           
-          const pageTreeCounts = [];
-          for (const pattern of pageTreePatterns) {
-            while ((match = pattern.exec(pdfText)) !== null) {
-              const count = parseInt(match[1]);
-              if (count > 0 && count < 100000) {
-                pageTreeCounts.push(count);
-              }
+          const pageObjects = new Set();
+          for (const pattern of pageTypePatterns) {
+            let m;
+            while ((m = pattern.exec(pdfText)) !== null) {
+              // Use a range to avoid counting same object multiple times
+              const rangeStart = Math.floor(m.index / 1000) * 1000;
+              pageObjects.add(rangeStart);
             }
           }
           
-          if (pageTreeCounts.length > 0) {
-            const maxCount = Math.max(...pageTreeCounts);
-            // If we found a count > 1, trust it more than page object count (which might miss some)
-            if (maxCount > 1) {
-              pageCountFromStructure = maxCount;
-              console.log(`Method 2: Found ${pageCountFromStructure} pages from page tree /Count`);
-            }
-          }
-        }
-        
-        // Method 3: Look for all /Count values and find the maximum reasonable one
-        // This is ALWAYS checked because /Count in the page tree is the most reliable indicator
-        const allCountMatches = pdfText.match(/\/Count\s+(\d+)/g);
-        if (allCountMatches && allCountMatches.length > 0) {
-          const allCounts = allCountMatches.map(m => {
-            const numMatch = m.match(/(\d+)/);
-            return numMatch ? parseInt(numMatch[1]) : 0;
-          }).filter(c => c > 0 && c < 100000); // Consider all counts, not just > 1
-          
-          if (allCounts.length > 0) {
-            // Sort counts and look for the largest reasonable one
-            const sortedCounts = allCounts.sort((a, b) => b - a);
-            // The largest count is often the total page count in the root page tree
-            const maxCount = sortedCounts[0];
+          if (pageObjects.size > 0) {
+            const pageObjCount = pageObjects.size;
+            console.log(`Found ${pageObjCount} pages by counting /Type /Page objects`);
             
-            // Always prefer /Count if it's larger than page object count
-            // Page object count can be inaccurate if PDF uses object streams or compression
-            if (!pageCountFromStructure || maxCount >= pageCountFromStructure) {
-              // Only use if it's reasonable (not too large)
-              if (maxCount < 10000) {
-                pageCountFromStructure = maxCount;
-                console.log(`Method 3: Found ${pageCountFromStructure} pages from /Count values (checked ${allCounts.length} counts, max was ${maxCount})`);
-              }
+            // Use this if we don't have a structure count, or if it's larger
+            if (!pageCountFromStructure || pageObjCount > pageCountFromStructure) {
+              pageCountFromStructure = pageObjCount;
+              console.log(`✓ Using page object count: ${pageCountFromStructure} pages`);
             }
           }
         }
         
-        // Method 4: Count endobj markers after page objects (backup)
+        // FALLBACK METHOD 2: Count page objects with endobj
         if (!pageCountFromStructure || pageCountFromStructure === 1) {
-          // Count how many page dictionaries end with endobj
-          const pageEndObjPattern = /\/Type\s*\/Page[\s\S]{0,1000}?endobj/gi;
+          const pageEndObjPattern = /\/Type\s*\/Page[\s\S]{0,2000}?endobj/gi;
           const pageEndObjMatches = pdfText.match(pageEndObjPattern);
           if (pageEndObjMatches && pageEndObjMatches.length > 0) {
             const count = pageEndObjMatches.length;
+            console.log(`Found ${count} pages by counting page dictionaries with endobj`);
             if (count > pageCountFromStructure) {
               pageCountFromStructure = count;
-              console.log(`Method 4: Found ${pageCountFromStructure} pages by counting page endobj markers`);
+              console.log(`✓ Using endobj count: ${pageCountFromStructure} pages`);
             }
           }
         }
         
-        if (pageCountFromStructure) {
-          console.log(`Final structure-based page count: ${pageCountFromStructure} pages`);
+        if (pageCountFromStructure && pageCountFromStructure > 1) {
+          console.log(`✅ Final structure-based page count: ${pageCountFromStructure} pages`);
+        } else if (pageCountFromStructure === 1) {
+          console.warn(`⚠️ Structure parsing found only 1 page - this might be inaccurate for ${fileName}`);
         } else {
-          console.warn(`Could not extract page count from PDF structure for ${fileName}`);
+          console.warn(`⚠️ Could not extract page count from PDF structure for ${fileName}`);
         }
       } catch (structureError) {
-        console.error('Error extracting page count from PDF structure:', structureError.message);
+        console.error('❌ Error extracting page count from PDF structure:', structureError.message);
         console.error('Structure error stack:', structureError.stack);
       }
       

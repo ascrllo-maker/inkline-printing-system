@@ -79,13 +79,20 @@ app.use(express.json({ limit: '50mb' }));
 app.use(express.urlencoded({ extended: true, limit: '50mb' }));
 app.use('/uploads', express.static('uploads'));
 
+// Fast ping endpoint - responds immediately (for keep-alive pings)
+app.get('/ping', (req, res) => {
+  res.status(200).json({ 
+    status: 'ok',
+    timestamp: new Date().toISOString()
+  });
+});
+
 // Health check endpoint for Render and Cloud Run
 app.get('/health', (req, res) => {
-  const dbStatus = mongoose.connection.readyState === 1 ? 'connected' : 'disconnected';
+  // Respond immediately without checking database to keep it fast
   res.status(200).json({ 
     status: 'ok', 
     timestamp: new Date().toISOString(),
-    database: dbStatus,
     uptime: process.uptime()
   });
 });

@@ -11,14 +11,20 @@ function IDImageDisplay({ imageUrl }) {
   const [imageSrc, setImageSrc] = useState(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(false);
+  const blobUrlRef = useRef(null);
 
   useEffect(() => {
-    let currentBlobUrl = null;
-    
     const loadImage = async () => {
       if (!imageUrl) {
         setLoading(false);
+        setImageSrc(null);
         return;
+      }
+
+      // Revoke previous blob URL if it exists
+      if (blobUrlRef.current) {
+        URL.revokeObjectURL(blobUrlRef.current);
+        blobUrlRef.current = null;
       }
 
       try {
@@ -39,13 +45,14 @@ function IDImageDisplay({ imageUrl }) {
         // Create blob URL from response
         const blob = new Blob([response.data], { type: response.data.type || 'image/jpeg' });
         const blobUrl = URL.createObjectURL(blob);
-        currentBlobUrl = blobUrl;
+        blobUrlRef.current = blobUrl;
         setImageSrc(blobUrl);
         setLoading(false);
       } catch (err) {
         console.error('Error loading ID image:', err);
         setError(true);
         setLoading(false);
+        setImageSrc(null);
       }
     };
 
@@ -53,8 +60,9 @@ function IDImageDisplay({ imageUrl }) {
 
     // Cleanup: revoke blob URL when component unmounts or imageUrl changes
     return () => {
-      if (currentBlobUrl) {
-        URL.revokeObjectURL(currentBlobUrl);
+      if (blobUrlRef.current) {
+        URL.revokeObjectURL(blobUrlRef.current);
+        blobUrlRef.current = null;
       }
     };
   }, [imageUrl]);

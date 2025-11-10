@@ -13,10 +13,33 @@ const pdfParse = require('pdf-parse');
  */
 export const countPages = async (fileBuffer, mimeType, fileName) => {
   try {
+    // Validate file buffer
+    if (!fileBuffer || !Buffer.isBuffer(fileBuffer)) {
+      console.error('Invalid file buffer provided to countPages');
+      return 1;
+    }
+
     // PDF files
     if (mimeType === 'application/pdf' || fileName.toLowerCase().endsWith('.pdf')) {
-      const data = await pdfParse(fileBuffer);
-      return data.numpages || 1;
+      console.log(`Attempting to parse PDF: ${fileName}, MIME type: ${mimeType}, Buffer size: ${fileBuffer.length} bytes`);
+      
+      try {
+        const data = await pdfParse(fileBuffer);
+        const pageCount = data.numpages || 1;
+        console.log(`Successfully parsed PDF ${fileName}: ${pageCount} pages`);
+        return pageCount;
+      } catch (pdfError) {
+        console.error(`Error parsing PDF ${fileName}:`, pdfError);
+        console.error('PDF Error details:', {
+          message: pdfError.message,
+          stack: pdfError.stack,
+          fileName: fileName,
+          bufferLength: fileBuffer.length,
+          mimeType: mimeType
+        });
+        // Re-throw to be caught by outer catch
+        throw pdfError;
+      }
     }
     
     // Image files - count as 1 page
@@ -53,10 +76,19 @@ export const countPages = async (fileBuffer, mimeType, fileName) => {
     }
     
     // Default: 1 page for unknown file types
-    console.warn(`Unknown file type for page counting: ${mimeType}. Defaulting to 1 page.`);
+    console.warn(`Unknown file type for page counting: ${mimeType || 'unknown'}, fileName: ${fileName || 'unknown'}. Defaulting to 1 page.`);
     return 1;
   } catch (error) {
     console.error('Error counting pages:', error);
+    console.error('Error details:', {
+      message: error.message,
+      stack: error.stack,
+      fileName: fileName,
+      mimeType: mimeType,
+      bufferType: fileBuffer ? typeof fileBuffer : 'null',
+      bufferLength: fileBuffer ? fileBuffer.length : 0,
+      isBuffer: fileBuffer ? Buffer.isBuffer(fileBuffer) : false
+    });
     // Default to 1 page if counting fails
     return 1;
   }

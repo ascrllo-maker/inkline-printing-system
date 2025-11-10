@@ -14,7 +14,18 @@ router.post('/count-pages', protect, uploadFile.single('file'), async (req, res)
       return res.status(400).json({ message: 'File is required' });
     }
 
+    console.log('File upload received:', {
+      fileName: req.file.originalname,
+      mimeType: req.file.mimetype,
+      size: req.file.size,
+      bufferType: req.file.buffer ? typeof req.file.buffer : 'null',
+      isBuffer: req.file.buffer ? Buffer.isBuffer(req.file.buffer) : false,
+      bufferLength: req.file.buffer ? req.file.buffer.length : 0
+    });
+
     const pageCount = await countPages(req.file.buffer, req.file.mimetype, req.file.originalname);
+    
+    console.log(`Page count result for ${req.file.originalname}: ${pageCount} pages`);
     
     res.json({
       totalPages: pageCount,
@@ -24,6 +35,7 @@ router.post('/count-pages', protect, uploadFile.single('file'), async (req, res)
     });
   } catch (error) {
     console.error('Error counting pages:', error);
+    console.error('Error stack:', error.stack);
     res.status(500).json({ message: 'Error counting pages', error: error.message });
   }
 });

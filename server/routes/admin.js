@@ -1166,6 +1166,21 @@ router.get('/file/*', protect, async (req, res) => {
         if (ext.toLowerCase() === '.pdf' && contentType !== 'application/pdf') {
           contentType = 'application/pdf';
         }
+        
+        // Ensure images have the correct content type
+        const imageExtensions = ['.jpg', '.jpeg', '.png', '.gif', '.webp', '.bmp', '.svg'];
+        if (imageExtensions.includes(ext.toLowerCase())) {
+          const imageMimeTypes = {
+            '.jpg': 'image/jpeg',
+            '.jpeg': 'image/jpeg',
+            '.png': 'image/png',
+            '.gif': 'image/gif',
+            '.webp': 'image/webp',
+            '.bmp': 'image/bmp',
+            '.svg': 'image/svg+xml'
+          };
+          contentType = imageMimeTypes[ext.toLowerCase()] || contentType;
+        }
 
         console.log('Serving GridFS file:', {
           fileId: fileId,
@@ -1305,6 +1320,21 @@ router.get('/file/*', protect, async (req, res) => {
           if (ext.toLowerCase() === '.pdf' && contentType !== 'application/pdf') {
             contentType = 'application/pdf';
           }
+          
+          // Ensure images have the correct content type
+          const imageExtensions = ['.jpg', '.jpeg', '.png', '.gif', '.webp', '.bmp', '.svg'];
+          if (imageExtensions.includes(ext.toLowerCase())) {
+            const imageMimeTypes = {
+              '.jpg': 'image/jpeg',
+              '.jpeg': 'image/jpeg',
+              '.png': 'image/png',
+              '.gif': 'image/gif',
+              '.webp': 'image/webp',
+              '.bmp': 'image/bmp',
+              '.svg': 'image/svg+xml'
+            };
+            contentType = imageMimeTypes[ext.toLowerCase()] || contentType;
+          }
 
           console.log('Serving GridFS file from order lookup:', {
             fileId: order.gridfsFileId,
@@ -1401,6 +1431,21 @@ router.get('/file/*', protect, async (req, res) => {
     // Determine content type from file extension
     const ext = path.extname(normalizedPath);
     let contentType = mime.lookup(ext);
+    
+    // Ensure images have the correct content type
+    const imageExtensions = ['.jpg', '.jpeg', '.png', '.gif', '.webp', '.bmp', '.svg'];
+    if (imageExtensions.includes(ext.toLowerCase())) {
+      const imageMimeTypes = {
+        '.jpg': 'image/jpeg',
+        '.jpeg': 'image/jpeg',
+        '.png': 'image/png',
+        '.gif': 'image/gif',
+        '.webp': 'image/webp',
+        '.bmp': 'image/bmp',
+        '.svg': 'image/svg+xml'
+      };
+      contentType = imageMimeTypes[ext.toLowerCase()] || contentType;
+    }
     
     // Fallback for common file types if mime lookup fails
     if (!contentType) {

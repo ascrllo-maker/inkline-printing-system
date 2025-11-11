@@ -266,10 +266,10 @@ export default function AdminPortal({ shop }) {
       }
 
       // Get content type from response headers first
-      let contentType = response.headers.get('content-type');
+      let contentType = response.headers.get('content-type') || response.headers.get('Content-Type');
       
       // If content-type is missing or generic, try to infer from file extension
-      if (!contentType || contentType === 'application/octet-stream') {
+      if (!contentType || contentType === 'application/octet-stream' || contentType.includes('text/plain')) {
         const extension = fileName ? fileName.split('.').pop()?.toLowerCase() : '';
         const mimeTypes = {
           'pdf': 'application/pdf',
@@ -283,6 +283,9 @@ export default function AdminPortal({ shop }) {
           'jpeg': 'image/jpeg',
           'png': 'image/png',
           'gif': 'image/gif',
+          'webp': 'image/webp',
+          'bmp': 'image/bmp',
+          'svg': 'image/svg+xml',
           'txt': 'text/plain',
           'html': 'text/html',
           'htm': 'text/html'
@@ -294,6 +297,11 @@ export default function AdminPortal({ shop }) {
         }
       }
       
+      // Normalize content type (remove charset if present for images)
+      if (contentType.includes('image/') && contentType.includes(';')) {
+        contentType = contentType.split(';')[0].trim();
+      }
+      
       // Read the response as an ArrayBuffer first to ensure complete download
       const arrayBuffer = await response.arrayBuffer();
       
@@ -302,14 +310,16 @@ export default function AdminPortal({ shop }) {
         toast.dismiss(loadingToast);
         throw new Error('File is empty or could not be loaded');
       }
-      
-      if (process.env.NODE_ENV === 'development') {
-        console.log('File loaded:', {
-          size: arrayBuffer.byteLength,
-          contentType: contentType,
-          fileName: fileName
-        });
-      }
+
+      console.log('File loaded:', {
+        size: arrayBuffer.byteLength,
+        contentType: contentType,
+        fileName: fileName,
+        responseHeaders: {
+          'content-type': response.headers.get('content-type'),
+          'content-length': response.headers.get('content-length')
+        }
+      });
       
       // Create a blob with the correct MIME type
       const blob = new Blob([arrayBuffer], { type: contentType });
@@ -319,6 +329,12 @@ export default function AdminPortal({ shop }) {
         toast.dismiss(loadingToast);
         throw new Error('Blob is empty after creation');
       }
+      
+      console.log('Blob created:', {
+        size: blob.size,
+        type: blob.type,
+        fileName: fileName
+      });
       
       // Create blob URL
       const blobUrl = URL.createObjectURL(blob);
@@ -369,54 +385,248 @@ export default function AdminPortal({ shop }) {
           URL.revokeObjectURL(blobUrl);
         }
       } else if (isImage) {
-        // For images, create a new window with the image
+        // For images, convert to data URL and embed in HTML
+        // Blob URLs don't work reliably when opened in new windows due to browser security
         try {
-          const imgWindow = window.open('', '_blank', 'noopener,noreferrer');
-          if (!imgWindow) {
+          console.log('Processing image:', { fileName, contentType, blobSize: blob.size });
+          
+          // Check blob size first (data URLs have browser limits, usually 2-4MB)
+          const MAX_DATA_URL_SIZE = 3000000; // ~3MB to be safe (some browsers allow up to 4MB)
+          
+          if (blob.size > MAX_DATA_URL_SIZE) {
+            console.warn('Image is too large for data URL display:', blob.size, 'bytes');
             toast.dismiss(loadingToast);
-            toast.error('Popup blocked. Please allow popups for this site.');
-            URL.revokeObjectURL(blobUrl);
+            toast.error('Image is too large to display. Downloading instead...');
+            
+            // Download the file directly
+            const link = document.createElement('a');
+            link.href = blobUrl;
+            link.download = fileName || 'image';
+            link.style.display = 'none';
+            document.body.appendChild(link);
+            link.click();
+            document.body.removeChild(link);
+            toast.success('Image download started');
+            
+            // Clean up after a delay
+            setTimeout(() => {
+              URL.revokeObjectURL(blobUrl);
+            }, 1000);
             return;
           }
           
-          imgWindow.document.write(`
-            <!DOCTYPE html>
-            <html>
-              <head>
-                <title>${fileName || 'Image'}</title>
-                <style>
-                  body {
-                    margin: 0;
-                    padding: 20px;
-                    display: flex;
-                    justify-content: center;
-                    align-items: center;
-                    min-height: 100vh;
-                    background: #1a1a1a;
-                  }
-                  img {
-                    max-width: 100%;
-                    max-height: 100vh;
-                    object-fit: contain;
-                  }
-                </style>
-              </head>
-              <body>
-                <img src="${blobUrl}" alt="${fileName || 'Image'}" />
-              </body>
-            </html>
-          `);
-          imgWindow.document.close();
+          // Convert blob to data URL
+          const reader = new FileReader();
           
-          toast.dismiss(loadingToast);
-          toast.success('Image opened in new tab');
+          reader.onloadend = function() {
+            try {
+              const dataUrl = reader.result;
+              
+              if (!dataUrl || typeof dataUrl !== 'string' || !dataUrl.startsWith('data:')) {
+                console.error('Invalid data URL result:', typeof dataUrl, dataUrl ? dataUrl.substring(0, 50) : 'null');
+                throw new Error('Failed to convert image to data URL');
+              }
+              
+              console.log('Data URL created successfully, length:', dataUrl.length);
+              
+              // Check if data URL is too large for browser limits (some browsers limit data URLs to 2-4MB)
+              // The HTML data URL will be larger than the image data URL due to encoding
+              if (dataUrl.length > 2000000) { // ~2MB limit for image data URL
+                console.warn('Image data URL is too large, downloading instead');
+                toast.dismiss(loadingToast);
+                toast.error('Image is too large to display. Downloading instead...');
+                URL.revokeObjectURL(blobUrl);
+                
+                // Download the file
+                const link = document.createElement('a');
+                link.href = blobUrl;
+                link.download = fileName || 'image';
+                link.style.display = 'none';
+                document.body.appendChild(link);
+                link.click();
+                document.body.removeChild(link);
+                toast.success('Image download started');
+                setTimeout(() => {
+                  URL.revokeObjectURL(blobUrl);
+                }, 1000);
+                return;
+              }
+              
+              // Escape the fileName for use in HTML to prevent XSS
+              const escapedFileName = (fileName || 'Image')
+                .replace(/&/g, '&amp;')
+                .replace(/</g, '&lt;')
+                .replace(/>/g, '&gt;')
+                .replace(/"/g, '&quot;')
+                .replace(/'/g, '&#039;');
+              
+              // Create HTML content with the image embedded as data URL
+              // Use minimal HTML to reduce size
+              // Important: Don't encode the data URL - it's already properly formatted
+              const htmlContent = `<!DOCTYPE html><html><head><meta charset="UTF-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>${escapedFileName}</title><style>*{margin:0;padding:0;box-sizing:border-box}html,body{width:100%;height:100%;overflow:hidden}body{display:flex;justify-content:center;align-items:center;min-height:100vh;background:#1a1a1a;padding:20px}img{max-width:100%;max-height:100vh;height:auto;width:auto;object-fit:contain;display:block;border-radius:4px;box-shadow:0 4px 20px rgba(0,0,0,.5)}</style></head><body><img src="${dataUrl}" alt="${escapedFileName}"></body></html>`;
+              
+              console.log('Creating HTML blob, content length:', htmlContent.length);
+              
+              // Create HTML blob (not data URL) - this preserves the data URL inside
+              const htmlBlob = new Blob([htmlContent], { type: 'text/html;charset=utf-8' });
+              const htmlBlobUrl = URL.createObjectURL(htmlBlob);
+              
+              console.log('HTML blob URL created, opening in new window');
+              
+              // Open the HTML blob in a new window
+              // The blob URL should work because it's created in the same context
+              const imgWindow = window.open(htmlBlobUrl, '_blank', 'noopener,noreferrer');
+              
+              if (!imgWindow) {
+                toast.dismiss(loadingToast);
+                toast.error('Popup blocked. Please allow popups for this site.');
+                URL.revokeObjectURL(htmlBlobUrl);
+                URL.revokeObjectURL(blobUrl);
+                return;
+              }
+              
+              // Wait a moment to ensure window loads
+              setTimeout(() => {
+                try {
+                  // Check if window is still open
+                  if (imgWindow.closed) {
+                    console.log('Image window was closed immediately');
+                    URL.revokeObjectURL(htmlBlobUrl);
+                    URL.revokeObjectURL(blobUrl);
+                    return;
+                  }
+                  
+                  // Monitor window closure for cleanup
+                  const cleanup = setInterval(() => {
+                    try {
+                      if (imgWindow.closed) {
+                        clearInterval(cleanup);
+                        URL.revokeObjectURL(htmlBlobUrl);
+                        URL.revokeObjectURL(blobUrl);
+                        console.log('Image window closed, cleaned up blob URLs');
+                      }
+                    } catch (e) {
+                      // Window might be from different origin, can't check
+                      clearInterval(cleanup);
+                    }
+                  }, 1000);
+                  
+                  // Clear interval after 60 seconds
+                  setTimeout(() => {
+                    clearInterval(cleanup);
+                  }, 60000);
+                  
+                  toast.dismiss(loadingToast);
+                  toast.success('Image opened in new tab');
+                  console.log('Image window opened successfully');
+                  
+                } catch (e) {
+                  console.error('Error checking window:', e);
+                  toast.dismiss(loadingToast);
+                  toast.success('Image opened in new tab');
+                  // Clean up blob URLs after a delay
+                  setTimeout(() => {
+                    URL.revokeObjectURL(htmlBlobUrl);
+                    URL.revokeObjectURL(blobUrl);
+                  }, 5000);
+                }
+              }, 500);
+              
+            } catch (error) {
+              console.error('Error creating image HTML:', error);
+              console.error('Error stack:', error.stack);
+              toast.dismiss(loadingToast);
+              toast.error('Failed to open image. Downloading instead...');
+              
+              // Clean up
+              URL.revokeObjectURL(blobUrl);
+              
+              // Fallback: download the file
+              try {
+                // Recreate blob URL for download
+                const downloadBlobUrl = URL.createObjectURL(blob);
+                const link = document.createElement('a');
+                link.href = downloadBlobUrl;
+                link.download = fileName || 'image';
+                link.style.display = 'none';
+                document.body.appendChild(link);
+                link.click();
+                document.body.removeChild(link);
+                toast.success('Image download started');
+                setTimeout(() => {
+                  URL.revokeObjectURL(downloadBlobUrl);
+                }, 1000);
+              } catch (downloadError) {
+                console.error('Error downloading image:', downloadError);
+              }
+            }
+          };
+          
+          reader.onerror = function(error) {
+            console.error('FileReader error:', error);
+            console.error('Error reading blob as data URL');
+            toast.dismiss(loadingToast);
+            toast.error('Failed to process image. Downloading instead...');
+            
+            // Clean up
+            URL.revokeObjectURL(blobUrl);
+            
+            // Fallback: download the file
+            try {
+              const downloadBlobUrl = URL.createObjectURL(blob);
+              const link = document.createElement('a');
+              link.href = downloadBlobUrl;
+              link.download = fileName || 'image';
+              link.style.display = 'none';
+              document.body.appendChild(link);
+              link.click();
+              document.body.removeChild(link);
+              toast.success('Image download started');
+              setTimeout(() => {
+                URL.revokeObjectURL(downloadBlobUrl);
+              }, 1000);
+            } catch (downloadError) {
+              console.error('Error downloading image:', downloadError);
+            }
+          };
+          
+          reader.onprogress = function(e) {
+            if (e.lengthComputable) {
+              const percentLoaded = Math.round((e.loaded / e.total) * 100);
+              console.log(`Reading image: ${percentLoaded}%`);
+            }
+          };
+          
+          // Read blob as data URL
+          console.log('Starting to read blob as data URL...');
+          reader.readAsDataURL(blob);
+          
         } catch (error) {
-          if (process.env.NODE_ENV === 'development') {
-            console.error('Error opening image:', error);
-          }
+          console.error('Error opening image:', error);
+          console.error('Error stack:', error.stack);
           toast.dismiss(loadingToast);
-          toast.error('Failed to open image');
+          toast.error('Failed to open image. Downloading instead...');
+          
+          // Clean up
           URL.revokeObjectURL(blobUrl);
+          
+          // Fallback: download the file
+          try {
+            const downloadBlobUrl = URL.createObjectURL(blob);
+            const link = document.createElement('a');
+            link.href = downloadBlobUrl;
+            link.download = fileName || 'image';
+            link.style.display = 'none';
+            document.body.appendChild(link);
+            link.click();
+            document.body.removeChild(link);
+            toast.success('Image download started');
+            setTimeout(() => {
+              URL.revokeObjectURL(downloadBlobUrl);
+            }, 1000);
+          } catch (downloadError) {
+            console.error('Error downloading image:', downloadError);
+          }
         }
       } else if (isText) {
         // For text files, open in a new window with formatted text

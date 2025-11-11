@@ -55,16 +55,21 @@ const documentFilter = (req, file, cb) => {
     'application/vnd.openxmlformats-officedocument.presentationml.presentation',
     'application/vnd.ms-excel',
     'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
-    'image/jpeg',
-    'image/png',
-    'image/jpg',
     'text/plain'
   ];
 
+  // Allow all image types (more flexible than listing each one)
+  // This covers: jpeg, jpg, png, gif, webp, bmp, svg, etc.
+  if (file.mimetype.startsWith('image/')) {
+    cb(null, true);
+    return;
+  }
+
+  // Check other allowed document types
   if (allowedTypes.includes(file.mimetype)) {
     cb(null, true);
   } else {
-    cb(new Error('File type not supported for printing!'), false);
+    cb(new Error(`File type not supported for printing! Allowed types: PDF, Word, PowerPoint, Excel, Text, and Images. Received: ${file.mimetype}`), false);
   }
 };
 
